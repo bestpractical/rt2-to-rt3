@@ -334,6 +334,7 @@ sub export_queues {
         my $ks = $Queue->KeywordSelects();
         $ks->{'find_disabled_rows'} = 1;
         foreach my $keysel ( @{ $ks->ItemsArrayRef } ) {
+            next if ($keysel->ObjectVal == 0);
             my $ks_ds;
             foreach my $param ( sort keys %$ksacc, 'id' ) {
                 $ks_ds->{$param} = $keysel->_Value($param)
