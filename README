@@ -1,0 +1,38 @@
+Migrating from RT 2.0 to RT 3.0 
+
+Create a directory to hold your RT2 database dump. here we'll refer to it as
+DIRNAME. Anywhere you see the string  "DIRNAME", replace it with the path to
+your directory.
+
+Tell rt-2.0-to-dumpfile where your RT libraries live. (Edit the 'use lib' lines)
+
+
+Execute:
+rt-2.0-to-dumpfile  DIRNAME
+
+DIRNAME will now contain one file called "metadata" and one file per ticket.
+That's right. one file for each ticket. If you've got an RT instance with
+250,000 tickets, you might want to consider altering these scripts so you don't
+create a directory with 250,000 files in it. If you do, there are likely other
+users who'd greatly appreciate it if you posted them to rt-devel.
+
+
+Install rt3. Let it set up your rt3 database.
+
+Tell dumpfile-to-rt-3.0 where your RT libraries live. (Edit the 'use lib' lines)
+
+If your RT instance contains tickets encoded in a characterset other than
+"IS0-8859-1", you'll want to edit the value of $ENCODING in dumpfile-to-rt-3.0.
+
+
+Execute:
+dumpfile-to-rt-3.0 DIRNAME
+
+Watch it spin. On my laptop, it processes approximately one ticket per second.
+If it crashes, please send a crashdump to rt-devel@lists.fsck.com
+
+
+        Jesse Vincent
+        jesse@bestpractical.com
+        24 Jan 2003
+
