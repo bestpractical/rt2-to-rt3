@@ -3,8 +3,13 @@
 
 use strict;
 
-my $export_dir = shift;
+my $export_dir_base = shift;
+my $export_dir_suffix = 0; 
 
+# make this ridiculously large if you don't want a limit 
+my $export_dir_limit = 1000; 
+my $export_dir = "$export_dir_base.$export_dir_suffix"; 
+&checkDirExists($export_dir); 
 
 
 use Carp;
@@ -249,6 +254,16 @@ $tix->Limit( FIELD => 'id', OPERATOR => "!=", VALUE => "0" );
 while ( my $t = $tix->Next ) {
         my $tick_ds;
     print STDERR "Exporting ticket " . $t->Id . "\n";
+     $export_dir_counter ++; 
+       if ($export_dir_counter > $export_dir_limit) { 
+               $export_dir_suffix ++; 
+               $export_dir = "$export_dir_base.$export_dir_suffix"; 
+               $export_dir_counter = 0; 
+               &checkDirExists($export_dir); 
+               print STDERR "* export_dir changed - $export_dir\n"; 
+ 
+       } 
+
     foreach my $param ( sort keys %{ $t->{_AccessibleCache} }, 'id' ) {
         $tick_ds->{$param} = $t->_Value($param)
           if ( $t->_Value($param) );
@@ -320,3 +335,10 @@ close (TICK);
 
 }
 
+
+sub checkDirExists { 
+      my ($dir) = @_; 
+      if ( ! ( -d "$dir") ) { 
+              mkdir ("$dir", 0771); 
+      } 
+}

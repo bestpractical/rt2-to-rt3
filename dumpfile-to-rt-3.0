@@ -109,9 +109,12 @@ if ($import_users) {
         delete $user->{'Password'};
         print "Creating $old_id - " . $user->{'Name'} . "\n";
         encode_hashref($user);
+        $user_obj->LoadByEmail($user->{'EmailAddress'});
+        unless ($user_obj->Id) {
         my ($uid, $umsg) = $user_obj->Create( %{$user} );
+        }
         my $id = $user_obj->Id();
-        die "Failed to create user for" . Dumper $user. "\n$umsg\n" unless ($id);
+        die "Failed to create user for" . scalar Dumper $user unless ($id);
         $user_map->{$old_id} = $id;
 
     }
@@ -242,6 +245,8 @@ foreach my $queue ( @{$queues} ) {
     $queue_map->{ $temp{'id'} } = $id;
 
     foreach my $watcher ( @{ $temp{Watchers} } ) {
+        $watcher->{'PrincipalId'} = $user_map->{$watcher->{'id'}};
+        delete $watcher->{'id'};
         $queue_obj->AddWatcher($watcher);
     }
 
@@ -338,8 +343,12 @@ foreach my $queue ( @{$queues} ) {
 # for each ticke
 
 if ($import_tickets) {
-
-    opendir (DIR, $DIR) || die "Couldn't open $DIR";
+        
+    opendir (TOPDIR, $DIR) || die "Couldn't open $DIR";
+    while (my $subdir = readdir(TOPDIR)) {
+        next if ($subdir =~ /\./);
+        next unless (-d $subdir);
+    opendir (DIR, $subdir) || die "Couldn't open $DIR";
     while (my $file = readdir(DIR)) {
         next unless ($file =~ /^t-(\d+)$/);
         no warnings qw/redefine/;
@@ -499,6 +508,7 @@ if ($import_tickets) {
         }
 
     }
+  }
 }
 
 
