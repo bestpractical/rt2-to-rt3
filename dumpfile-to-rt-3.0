@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # (c) 1996-2003 Jesse Vincent <jesse@bestpractical.com>
 
-# VERSION 1.11
+# VERSION 1.12
 
 package RT;
 use strict;
@@ -184,7 +184,7 @@ foreach my $right ( @{ $VAR1->{'Global'}->{'Right'} } ) {
                         Right  => $right->{'Name'} );
 }
 
-foreach my $cf ( @{ $VAR1->{'Global'}->{'CustomField'} } ) {
+foreach my $cf ( values %{ $VAR1->{'Global'}->{'CustomField'} } ) {
     my $type;
     my $cfobj = RT::CustomField->new($RT::SystemUser);
     if ( $cf->{'Single'} ) {
