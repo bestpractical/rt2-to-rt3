@@ -448,13 +448,13 @@ sub load_user {
     }
     else {
         $user_objects{$user_id} = RT::User->new($RT::SystemUser);
-        if ( $user_id =~ /@/ ) {
+        if ( $user_id =~ /^\d+$/ ) {
+            $user_objects{$user_id}->LoadByCols( id => $user_id );
+        }
+       elsif ( $user_id =~ /@/ ) {
             $user_objects{$user_id}->LoadByCols( EmailAddress => $user_id );
             unless ( $user_objects{$user_id}->id ) {
                 $user_objects{$user_id}->LoadByCols( Name => $user_id );
-            }
-            unless ( $user_objects{$user_id}->id ) {
-                $user_objects{$user_id}->LoadByCols( id => $user_id );
             }
         }
         else {
