@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # (c) 1996-2003 Jesse Vincent <jesse@bestpractical.com>
 
-# VERSION 1.7
+# VERSION 1.8
 
 package RT;
 use strict;
@@ -67,7 +67,7 @@ if ( ExportType() eq 'incremental' ) {
     foreach my $user ( @{$users} ) {
         encode_hashref($user);
         my $obj = load_user( $user->{'Name'} );
-        unless ( $obj->Id ) {
+        if ( ! $obj->Id  && $user->{'EmailAddress'}) {
             $obj = load_user( $user->{'EmailAddress'} );
         }
         if ( $obj->Id ) {
@@ -126,14 +126,19 @@ if ($import_groups) {
 
         $g->CreateUserDefinedGroup( %{$group} );
         my $id = $g->Id();
-        die "Failed to create group for" . Dumper $groups->{$group}
+        warn "Failed to create group for" . Dumper $groups->{$group}
           unless ($id);
         $group_map->{$old_id} = $id;
 
         #         import members
 
         foreach my $member ( @{$members} ) {
-            $g->AddMember( $user_map->{$member} );
+            unless ($user_map->{$member}) {
+                warn "Couldn't find user with RT2 userid ".$member. " - not adding to ".$g->Name;
+                } 
+            else {
+                $g->AddMember( $user_map->{$member} );
+            }
         }
     }
 }
@@ -153,7 +158,7 @@ foreach my $right ( @{ $VAR1->{'Global'}->{'Right'} } ) {
         }
         $princ->Load($id);
         $princ->Id
-          || die "Couldn't load principal $id to grant them "
+          || warn "Couldn't load principal $id to grant them "
           . $right->{'Name'}
           . " globally\n"
           . Dumper($right);
@@ -167,7 +172,7 @@ foreach my $right ( @{ $VAR1->{'Global'}->{'Right'} } ) {
         $id    = $g->Id;
         $princ = $g->PrincipalObj;
         $g->Id
-          || die "Couldn't load principal "
+          ||  warn "Couldn't load principal "
           . $g->Id
           . " to grant them "
           . $right->{'Name'}
@@ -189,7 +194,7 @@ foreach my $cf ( @{ $VAR1->{'Global'}->{'CustomField'} } ) {
     }
     $cfobj->Create( Name => $cf->{'Name'}, Type => $type, Queue => '0', Disabled => ( $cf->{'Disabled'}|| 0) );
     unless ( $cfobj->Id ) {
-        die "Couldn't create custom field " . $cf->{'Name'};
+        warn "Couldn't create custom field " . $cf->{'Name'};
     }
     $cf_map->{ $cf->{'id'} } = $cfobj->Id;
 
@@ -219,7 +224,7 @@ foreach my $queue ( @{$queues} ) {
     my $queue_obj = RT::Queue->new($RT::SystemUser);
     $queue_obj->Create( %{$queue} );
     my $id = $queue_obj->Id();
-    die "Failed to create queue for" . Dumper $queue unless ($id);
+    warn "Failed to create queue for" . Dumper $queue unless ($id);
     $queue_map->{ $temp{'id'} } = $id;
 
     foreach my $watcher ( @{ $temp{Watchers} } ) {
@@ -253,7 +258,7 @@ foreach my $queue ( @{$queues} ) {
         }
         $princ->Load($id);
         $princ->Id
-          || die "Couldn't load principal $id to grant them "
+          || warn "Couldn't load principal $id to grant them "
           . $right->{'Name'}
           . " on queue "
           . $queue_obj->Name . "\n"
@@ -275,7 +280,7 @@ foreach my $queue ( @{$queues} ) {
                         Disabled => ( $cf->{'Disabled'} || 0) ,
                         Queue => $queue_obj->Id );
         unless ( $cfobj->Id ) {
-            die "Couldn't create custom field " . $cf->{'Name'};
+            warn "Couldn't create custom field " . $cf->{'Name'};
         }
         $cf_map->{ $cf->{'id'} } = $cfobj->Id;
         foreach my $val ( @{ $cf->{'Value'} } ) {
@@ -395,7 +400,7 @@ sub import_scrip {
 
 sub load_user {
     my $user_id = shift;
-    if ( exists $user_objects{$user_id} ) {
+    if ( $user_objects{$user_id} && $user_objects{$user_id}->Id) {
         return ( $user_objects{$user_id} );
     }
     else {
@@ -412,7 +417,7 @@ sub load_user {
         else {
             $user_objects{$user_id}->Load($user_id);
             unless ( $user_objects{$user_id}->id ) {
-                $user_objects{$user_id}->LoadByEmail($user_id);
+                $user_objects{$user_id}->LoadByEmail($user_id) if ($user_id);
             }
         }
 
@@ -433,6 +438,7 @@ sub import_tickets {
     while (my $file = readdir(DIR)) {
         print ".";
         next unless ($file =~ /^t-(\d+)$/);
+        print $file ."\n";
         require "$DIR/$subdir/$file" || die "Couldn't read ticket file $file";
         my $ticket = Data();
         my %temp;
@@ -491,7 +497,7 @@ sub import_tickets {
         $tick_object->Create( %{$ticket} );
 
         unless ( $tick_object->Id == $ticket->{id} ) {
-            die "Couldn't create ticket $ticket " . Dumper($ticket);
+            warn "Couldn't create ticket $ticket " . Dumper($ticket);
         }
 
 
@@ -511,21 +517,21 @@ sub import_tickets {
             }
             if ( $t->{'Type'} =~ /^AddWatcher$/ ) {
                 $t->{'NewValue'} ||= $RT::Nobody->Id;
-                my $u = load_user ($t->{'NewValue'} ||'Nobody') ;
-                unless ( $u->Id ) {
+                my $u = load_user ($t->{'NewValue'});
 
+                unless ( $u->Id ) {
                     my $new_user = RT::User->new($RT::SystemUser);
 
                     my ( $Val, $Message ) = $new_user->Create(
                                Name         => $t->{'NewValue'},
-                               EmailAddress => $t->{'NewValue'},
+                               EmailAddress => ($t->{'NewValue'} !~ /\s/? $t->{'NewValue'} : undef) ,
                                RealName     => $t->{'NewValue'},
                                Privileged   => 0,
                                Comments => 'Autocreated when added as a watcher'
                     );
                     unless ($Val) {
-                        $RT::Logger->error( "Failed to create user "
-                                            . $t->{'NewValue'} . ": "
+                        $RT::Logger->error( "Failed to create user '"
+                                            . $t->{'NewValue'} . "': "
                                             . $Message );
 
                     }
@@ -542,7 +548,7 @@ sub import_tickets {
 
                     my ( $Val, $Message ) = $new_user->Create(
                                Name         => $t->{'OldValue'},
-                               EmailAddress => $t->{'OldValue'},
+                               EmailAddress => ($t->{'OldValue'} !~ /\s/? $t->{'NewValue'} : undef) ,
                                RealName     => $t->{'OldValue'},
                                Privileged   => 0,
                                Comments => 'Autocreated when added as a watcher'
@@ -563,8 +569,8 @@ sub import_tickets {
                 } 
 
             if ( $t->{'Type'} =~ /^(Force|Give|Take|Untake)$/ ) {
-                $t->{'OldValue'} = $user_map->{ $t->{OldValue} };
-                $t->{'NewValue'} = $user_map->{ $t->{NewValue} };
+                $t->{'OldValue'} = $user_map->{ $t->{OldValue} } || $RT::Nobody;
+                $t->{'NewValue'} = $user_map->{ $t->{NewValue} } || $RT::Nobody;
             }
 
             my $trans_obj = RT::Transaction->new($RT::SystemUser);
@@ -575,7 +581,7 @@ sub import_tickets {
             encode_hashref($t);
             $trans_obj->Create( %{$t} );
             unless ( $trans_obj->Id == $t->{'id'} ) {
-                die "Couldn't create trans  " . $t->{'id'} . " " . Dumper($t);
+                warn "Couldn't create trans  " . $t->{'id'} . " " . Dumper($t);
             }
 
             foreach my $a ( @{$attach} ) {
@@ -585,7 +591,7 @@ sub import_tickets {
                 my $att = RT::Attachment->new($RT::SystemUser);
                 $att->Import( %{$a} );
                 unless ( $att->Id ) {
-                    die "Couldn't create attachment $a " . Dumper($a);
+                    warn "Couldn't create attachment $a " . Dumper($a);
 
                 }
             }
@@ -600,7 +606,10 @@ sub import_tickets {
 sub import_user {
         my $user = shift;
 
+
         $user->{'Name'} = "Unnamed user ".$user->{'id'} unless ($user->{'Name'});
+        warn "Creating user ".$user->{'Name'};
+
         if ( $user->{'Name'} eq 'Nobody' ) {
             $user_map->{ $user->{'id'} } = $RT::Nobody->Id;
             next;
@@ -619,12 +628,12 @@ sub import_user {
           unless ( $user->{'Password'} =~ '^\*' );
         delete $user->{'Password'};
         print ".";
-        $user_obj = load_user($user->{'EmailAddress'});
+        $user_obj = load_user($user->{'EmailAddress'} || $user->{'Name'});
         unless ($user_obj->Id) {
         my ($uid, $umsg) = $user_obj->Create( %{$user} );
         }
         my $id = $user_obj->Id();
-        die "Failed to create user for" . scalar Dumper $user unless ($id);
+        warn "Failed to create user for" . scalar Dumper $user unless ($id);
         $user_map->{$old_id} = $id;
 }
 # }}}
