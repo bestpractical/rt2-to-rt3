@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # RT is (c) 1996-2003 Jesse Vincent <jesse@fsck.com>
 
-# Version 1.6
+# Version 1.9
 
 use strict;
 
@@ -334,7 +334,7 @@ sub export_queues {
         my $ks = $Queue->KeywordSelects();
         $ks->{'find_disabled_rows'} = 1;
         foreach my $keysel ( @{ $ks->ItemsArrayRef } ) {
-            next if ($keysel->ObjectVal == 0);
+            next if ($keysel->ObjectValue == 0);
             my $ks_ds;
             foreach my $param ( sort keys %$ksacc, 'id' ) {
                 $ks_ds->{$param} = $keysel->_Value($param)
