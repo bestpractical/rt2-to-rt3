@@ -25,7 +25,7 @@ use Getopt::Long qw(:config pass_through);
 use Data::Dumper;
 
 use lib "/opt/rt2/lib";
-use lib "/opt/rt3/etc";
+use lib "/opt/rt2/etc";
 
 use RT::Record;
 @RT::Record::ISA = qw(DBIx::SearchBuilder::Record);
@@ -255,6 +255,7 @@ sub export_tickets {
                     $att_ds->{$att_param} = $att->_Value($att_param)
                       if (defined $att->_Value($att_param) );
                 }
+                $att_ds->{'id'} = $att->id;
                 push ( @{ $trans_ds->{'Attachment'} }, $att_ds );
             }
 
@@ -379,6 +380,6 @@ sub export_queues {
 sub checkDirExists {
     my ($dir) = @_;
     if ( !( -d "$dir" ) ) {
-        mkdir( "$dir", 0771 );
+        mkdir( "$dir", 0771 ) || die "Couldn't create directory '$dir'";
     }
 }

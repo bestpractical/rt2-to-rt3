@@ -596,9 +596,6 @@ sub import_tickets {
             }
 
             foreach my $a ( @{$attach} ) { 
-		my $parent = $attachment_map->{$a->{'Parent'}} unless ($a->{'Parent'} == 0);
-		die 'Unable to determine proper parent for transaction. Please contact rt-devel@lists.fsck.com for support' unless ($a->{'Parent'} == 0 || !$parent);
-		$a->{'Parent'} = $parent;
                 my $att = RT::Attachment->new($RT::SystemUser);
                 $att->Import( %{$a} );
 			
@@ -606,7 +603,6 @@ sub import_tickets {
                     warn "Couldn't create attachment $a " . Dumper($a);
 
                 }
-		$attachment_map->{$a->{'id'} } = $att->Id;
             }
         }
 
