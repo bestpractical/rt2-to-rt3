@@ -208,7 +208,7 @@ foreach my $cf ( @{ $VAR1->{'Global'}->{'CustomField'} } ) {
     else {
         $type = 'SelectMultiple';
     }
-    $cfobj->Create( Name => $cf->{'Name'}, Type => $type, Queue => '0', Disabled => $cf->{'Disabled'} );
+    $cfobj->Create( Name => $cf->{'Name'}, Type => $type, Queue => '0', Disabled => ( $cf->{'Disabled'}|| 0) );
     unless ( $cfobj->Id ) {
         die "Couldn't create custom field " . $cf->{'Name'};
     }
@@ -289,7 +289,7 @@ foreach my $queue ( @{$queues} ) {
         }
         $cfobj->Create( Name  => $cf->{'Name'},
                         Type  => $type,
-                        Disabled => $cf->{'Disabled'},
+                        Disabled => ( $cf->{'Disabled'} || 0) ,
                         Queue => $queue_obj->Id );
         unless ( $cfobj->Id ) {
             die "Couldn't create custom field " . $cf->{'Name'};
