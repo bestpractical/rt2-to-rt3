@@ -195,10 +195,8 @@ sub export_tickets {
         my $tick_ds;
         print STDERR "\nExporting ticket " . $t->Id ;
         $export_dir_counter++;
-        if ( $export_dir_counter > $export_dir_limit ) {
-            $export_dir_counter++;
+        if ( $export_dir_counter % $export_dir_limit == 0) {
             $export_dir = "$export_dir_base" . "tickets-" . $export_dir_counter;
-            $export_dir_counter = 0;
             &checkDirExists($export_dir);
             print STDERR "* export_dir changed - $export_dir\n";
 
