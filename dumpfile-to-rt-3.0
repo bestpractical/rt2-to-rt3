@@ -102,6 +102,7 @@ if ($import_users) {
     $RT::Handle->SimpleQuery("DELETE FROM Users where Name='root'");
 
     foreach my $user ( @{$users} ) {
+      print "u";
         encode_hashref($user);
         import_user($user);
     }
@@ -115,7 +116,7 @@ if ($import_groups) {
 
     # foreach group
     foreach my $group ( @{$groups} ) {
-
+      print "g";
         #         create group
         my $g      = RT::Group->new($RT::SystemUser);
         my $old_id = $group->{'id'};
@@ -147,6 +148,7 @@ if ($import_groups) {
 if ($import_global_metadata) {
 
 foreach my $right ( @{ $VAR1->{'Global'}->{'Right'} } ) {
+  print "r";
     my $princ = RT::Principal->new($RT::SystemUser);
     my $id;
     if ( $right->{'PrincipalId'} ) {
@@ -185,6 +187,7 @@ foreach my $right ( @{ $VAR1->{'Global'}->{'Right'} } ) {
 }
 
 foreach my $cf ( values %{ $VAR1->{'Global'}->{'CustomField'} } ) {
+  print "f";
     my $type;
     my $cfobj = RT::CustomField->new($RT::SystemUser);
     if ( $cf->{'Single'} ) {
@@ -216,6 +219,7 @@ $RT::Handle->SimpleQuery("DELETE FROM Queues where id = 1");
 my $queues = $VAR1->{'Queue'};
 
 foreach my $queue ( @{$queues} ) {
+  print "q";
     my %temp;
     foreach my $attr qw(id CustomField Watchers Scrip Right) {
         $temp{$attr} = $queue->{$attr};
@@ -303,6 +307,7 @@ if ($import_links) {
 
      print "Importing links\n";
      foreach my $link ( @{ $VAR1->{'Link'} } ) {
+       print "l";
     my $l = RT::Link->new($RT::SystemUser);
 
     $link->{'Base'}   =~ s#/(.*?)/ticket/#/ticket/#;
@@ -464,7 +469,7 @@ sub import_tickets {
         $RT::Handle->SimpleQuery("DELETE FROM CustomFieldValues WHERE Ticket = '$id'");
                 $RT::Handle->SimpleQuery("DELETE FROM Tickets WHERE id = '$id'"); 
         }
-        }
+        } # end of incremental
         my $tick_object = RT::Ticket->new($RT::SystemUser);
 
         $ticket->{'Status'} = 'deleted' if ( $ticket->{'Status'} eq 'dead' );
@@ -570,8 +575,8 @@ sub import_tickets {
                 } 
 
             if ( $t->{'Type'} =~ /^(Force|Give|Take|Untake)$/ ) {
-                $t->{'OldValue'} = $user_map->{ $t->{OldValue} } || $RT::Nobody;
-                $t->{'NewValue'} = $user_map->{ $t->{NewValue} } || $RT::Nobody;
+                $t->{'OldValue'} = $user_map->{ $t->{OldValue} } || $RT::Nobody->Id;
+                $t->{'NewValue'} = $user_map->{ $t->{NewValue} } || $RT::Nobody->Id;
             }
 
             my $trans_obj = RT::Transaction->new($RT::SystemUser);
