@@ -6,15 +6,11 @@ your directory.
 
 Tell rt-2.0-to-dumpfile where your RT libraries live. (Edit the 'use lib' lines)
 
-
 Execute:
 rt-2.0-to-dumpfile  DIRNAME
 
-DIRNAME will now contain one file called "metadata" and one file per ticket.
-That's right. one file for each ticket. If you've got an RT instance with
-250,000 tickets, you might want to consider altering these scripts so you don't
-create a directory with 250,000 files in it. If you do, there are likely other
-users who'd greatly appreciate it if you posted them to rt-devel.
+DIRNAME will now contain one file called "metadata" and one subdirectories
+which contain about 1000 files, 1 file per ticket.
 
 
 Install rt3. Let it set up your rt3 database.
@@ -28,8 +24,25 @@ If your RT instance contains tickets encoded in a characterset other than
 Execute:
 dumpfile-to-rt-3.0 DIRNAME
 
-Watch it spin. On my laptop, it processes approximately one ticket per second.
-If it crashes, please send a crashdump to rt-devel@lists.fsck.com
+Watch it spin.  If it crashes, please send a crashdump to rt-devel@lists.fsck.com
+Importing is a heavy-weight process and for large databases can run for a very
+long time. (Huge imports can take over 24 hours to run.) The import toolset now
+ships with an "incremental" mode. The incremental mode will take care of any
+users or tickets which have changed since the specified date. Once your initial
+export has run, perform a secondary export:
+
+rt-2.0-to-dumpfile NEWDIRNAME since 2003-01-01 
+
+         (replace that date with the date before the initial export)
+
+Then execute:
+
+dumpfile-to-rt-3.0 NEWDIRNAME
+
+It's important to note that this incremental importer _mandates_ that queues,
+keyword selects, links and queue watchers not be changed on either RT instance
+during the export/import period.
+
 
 
         Jesse Vincent
