@@ -63,9 +63,12 @@ It's important to note that this incremental importer _mandates_ that queues,
 keyword selects, links and queue watchers not be changed on either RT instance
 during the export/import period.
 
+If you're using a database such as Postgres or Oracle that has
+explicit sequence support, you may need to set the value of each
+table's sequence to the MAX(id) for that table
 
 
         Jesse Vincent
         jesse@bestpractical.com
-        24 Jan 2003
+        1 Mar 2003
 
