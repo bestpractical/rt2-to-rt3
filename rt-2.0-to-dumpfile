@@ -3,14 +3,19 @@
 
 use strict;
 
+$| = 1;
 my $export_dir_base = shift;
-my $export_dir_suffix = 0; 
 
-# make this ridiculously large if you don't want a limit 
-my $export_dir_limit = 1000; 
-my $export_dir = "$export_dir_base.$export_dir_suffix"; 
-&checkDirExists($export_dir); 
+my $mode  = ( shift || 'all' );
+my $since = ( shift || undef );
 
+my $export_dir_counter = 0;
+$export_dir_base .= "/";
+
+# make this ridiculously large if you don't want a limit
+my $export_dir_limit = 1000;
+my $export_dir       = "$export_dir_base" . "tickets-" . "$export_dir_counter";
+&checkDirExists($export_dir);
 
 use Carp;
 use Getopt::Long qw(:config pass_through);
@@ -20,11 +25,9 @@ use lib "/opt/fsck.com-rt2/lib";
 use lib "/opt/fsck.com-rt2/etc";
 
 use RT::Record;
-@RT::Record::ISA=qw(DBIx::SearchBuilder::Record);
+@RT::Record::ISA = qw(DBIx::SearchBuilder::Record);
 
-
-use RT::Interface::CLI qw(CleanEnv LoadConfig DBConnect
-  GetCurrentUser GetMessageContent);
+use RT::Interface::CLI qw(CleanEnv LoadConfig DBConnect GetCurrentUser GetMessageContent);
 use RT::Groups;
 use RT::Users;
 use RT::Queues;
@@ -37,308 +40,342 @@ CleanEnv();
 #Load etc/config.pm and drop privs
 LoadConfig();
 
-
 #Connect to the database and get RT::SystemUser and RT::Nobody loaded
 DBConnect();
 
 package RT::Faketix;
 
-
 use RT::EasySearch;
 use RT::Ticket;
 
 use vars qw( @ISA );
-@ISA= qw(RT::EasySearch);
-
+@ISA = qw(RT::EasySearch);
 
 sub _Init {
     my $self = shift;
-    $self->{'table'} = 'Tickets';
+    $self->{'table'}       = 'Tickets';
     $self->{'primary_key'} = 'id';
     return ( $self->SUPER::_Init(@_) );
 }
 
-
 sub NewItem {
-    RT::Ticket->new(shift->CurrentUser);
+    RT::Ticket->new( shift->CurrentUser );
 }
-
-
 
 package main;
 
 my $ds;
 
-my $blank_Group = RT::Group->new($RT::SystemUser);
-$blank_Group->_Accessible( 'Foo', 'read' );
-my $acc = $blank_Group->{_AccessibleCache};
+if ( $mode =~ /^all$/i ) {
 
-my $Groups = RT::Groups->new($RT::SystemUser);
-$Groups->LimitToReal();
-$Groups->{'find_disabled_rows'} = 1;
-foreach my $Group ( @{ $Groups->ItemsArrayRef } ) {
+    my $blank_Group = RT::Group->new($RT::SystemUser);
+    $blank_Group->_Accessible( 'Foo', 'read' );
+    my $acc = $blank_Group->{_AccessibleCache};
+
+    my $Groups = RT::Groups->new($RT::SystemUser);
+    $Groups->LimitToReal();
+    $Groups->{'find_disabled_rows'} = 1;
+    foreach my $Group ( @{ $Groups->ItemsArrayRef } ) {
 
         my $group;
 
-    foreach my $param ( sort keys %$acc, 'id' ) {
-        $group->{$param} = $Group->_Value($param)
-          if ( $Group->_Value($param) );
-    }
-    my $members = $Group->MembersObj();
-    foreach my $member ( @{ $members->ItemsArrayRef } ) {
-        push @{ $group->{Member} }, $member->UserObj->Id;
-
-    }
-        push @{$ds->{'Group'}},$group;
-}
-
-
-my $blank_User = RT::User->new($RT::SystemUser);
-$blank_User->_Accessible( 'Foo', 'read' );
-$acc = $blank_User->{_AccessibleCache};
-
-my $users = RT::Users->new($RT::SystemUser);
-$users->UnLimit();
-$users->{'find_disabled_rows'} = 1;
-
-foreach my $user ( @{ $users->ItemsArrayRef } ) {
-        my $user_ds;
-    foreach my $param ( sort keys %$acc, 'id' ) {
-        $user_ds->{$param} = $user->_Value($param)
-          if ( $user->_Value($param) );
-    }
-    push (@{$ds->{'User'}},$user_ds);
-}
-
-my $blank_Queue = RT::Queue->new($RT::SystemUser);
-$blank_Queue->_Accessible( 'Foo', 'read' );
-$acc = $blank_Queue->{_AccessibleCache};
-
-my $Queues = RT::Queues->new($RT::SystemUser);
-$Queues->UnLimit();
-$Queues->{'find_disabled_rows'} = 1;
-
-foreach my $Queue ( @{ $Queues->ItemsArrayRef } ) {
-        my $queue_ds;
-    foreach my $param ( sort keys %$acc, 'id' ) {
-        $queue_ds->{$param} = $Queue->_Value($param)
-          if ( $Queue->_Value($param) );
-    }
-    my $watchers = $Queue->Watchers();
-    my $watchers_ds;
-    foreach my $w ( @{ $watchers->ItemsArrayRef } ) {
-        my $ds = { Type => $w->Type,
-                   Email => $w->Email,
-                   Id => $w->Id };
-
-        push (@{$watchers_ds}, $ds);
+        foreach my $param ( sort keys %$acc, 'id' ) {
+            $group->{$param} = $Group->_Value($param)
+              if ( $Group->_Value($param) );
         }
-        $queue_ds->{'Watchers'} = $watchers_ds;
-    
+        my $members = $Group->MembersObj();
+        foreach my $member ( @{ $members->ItemsArrayRef } ) {
+            push @{ $group->{Member} }, $member->UserObj->Id;
 
+        }
+        push @{ $ds->{'Group'} }, $group;
+    }
 
+    my @users = export_users($ds);
+    $ds->{'User'} = \@users;
+
+    export_queues($ds);
     my $blank_KeywordSelect = RT::KeywordSelect->new($RT::SystemUser);
     $blank_KeywordSelect->_Accessible( 'Foo', 'read' );
-    my $ksacc = $blank_KeywordSelect->{_AccessibleCache};
+    my $global_ksacc = $blank_KeywordSelect->{_AccessibleCache};
+    my $global_ks    = RT::KeywordSelects->new($RT::SystemUser);
+    $global_ks->LimitToQueue(0);
+    $global_ks->{'find_disabled_rows'} = 1;
+    foreach my $keysel ( @{ $global_ks->ItemsArrayRef } ) {
 
-    my $ks = $Queue->KeywordSelects();
-    $ks->{'find_disabled_rows'}= 1;
-    foreach my $keysel ( @{ $ks->ItemsArrayRef } ) {
-        my $ks_ds;
-        foreach my $param ( sort keys %$ksacc, 'id' ) {
-            $ks_ds->{$param} = $keysel->_Value($param) if ( $keysel->_Value($param) );
+        foreach my $param ( sort keys %$global_ksacc, 'id' ) {
+            $ds->{Global}->{ $keysel->id }->{$param} = $keysel->_Value($param)
+              if ( $keysel->_Value($param) );
         }
         my $descendents = $keysel->KeywordObj->Descendents;
         foreach my $desc ( keys %{$descendents} ) {
-            push @{ $ks_ds->{Value} }, $descendents->{$desc};
+            push @{ $ds->{Global}->{ $keysel->id }->{Value} },
+              $descendents->{$desc};
 
         }
-        push (@{$queue_ds->{'CustomField'}}, $ks_ds);
+    }
+
+    my $scrips = RT::Scrips->new($RT::SystemUser);
+    $scrips->LimitToGlobal();
+    foreach my $scrip ( @{ $scrips->ItemsArrayRef } ) {
+        my $scrip_ds = { Condition => $scrip->ConditionObj->Name(),
+                         Template  => $scrip->TemplateObj->Name(),
+                         Action    => $scrip->ActionObj->Name(), };
+        push ( @{ $ds->{'Global'}->{'Scrip'} }, $scrip_ds );
+
     }
 
     my $ACL = RT::ACL->new($RT::SystemUser);
-    $ACL->LimitToQueue( $Queue->Id );
+    $ACL->LimitToSystem();
 
     foreach my $ace ( @{ $ACL->ItemsArrayRef } ) {
         my $right_ds = { PrincipalType => $ace->PrincipalType,
-                         PrincipalId => $ace->PrincipalObj->Id,
-                         Name => $ace->RightName };
-        if ($ace->PrincipalType eq 'Group' && $ace->PrincipalObj->Pseudo) {
-                $right_ds->{'Role'} =  $ace->PrincipalObj->Name;
-                delete $right_ds->{'PrincipalId'};
-                }
-        push ( @{ $queue_ds->{'Right'}}, $right_ds);
+                         PrincipalId   => $ace->PrincipalObj->Id,
+                         Name          => $ace->RightName };
+        if ( $ace->PrincipalType eq 'Group' && $ace->PrincipalObj->Pseudo ) {
+            $right_ds->{'Role'} = $ace->PrincipalObj->Name;
+            delete $right_ds->{'PrincipalId'};
+        }
+
+        push ( @{ $ds->{'Global'}->{'Right'} }, $right_ds );
     }
-	my $scrips = RT::Scrips->new($RT::SystemUser);
-	$scrips->LimitToQueue($Queue->Id);
-	foreach my $scrip (@{$scrips->ItemsArrayRef}) {
-                my $scrip_ds = {
-                Condition => $scrip->ConditionObj->Name(),
-                Template => $scrip->TemplateObj->Name(),
-                Action => $scrip->ActionObj->Name(),
-                };
-                push (@{$queue_ds->{'Scrip'}}, $scrip_ds);
-	} 
-        push (@{$ds->{'Queue'}}, $queue_ds);
 
-}
-my $blank_KeywordSelect = RT::KeywordSelect->new($RT::SystemUser);
-$blank_KeywordSelect->_Accessible( 'Foo', 'read' );
-my $global_ksacc = $blank_KeywordSelect->{_AccessibleCache};
-my $global_ks    = RT::KeywordSelects->new($RT::SystemUser);
-$global_ks->LimitToQueue(0);
-$global_ks->{'find_disabled_rows'}= 1;
-foreach my $keysel ( @{ $global_ks->ItemsArrayRef } ) {
-    foreach my $param ( sort keys %$global_ksacc, 'id' ) {
-        $ds->{Global}->{ $keysel->id }->{$param} = $keysel->_Value($param)
-          if ( $keysel->_Value($param) );
-    }
-    my $descendents = $keysel->KeywordObj->Descendents;
-    foreach my $desc ( keys %{$descendents} ) {
-        push @{ $ds->{Global}->{ $keysel->id }->{Value} },
-          $descendents->{$desc};
-
-    }
-}
-
-	my $scrips = RT::Scrips->new($RT::SystemUser);
-	$scrips->LimitToGlobal();
-	foreach my $scrip (@{$scrips->ItemsArrayRef}) {
-                my $scrip_ds = {
-                Condition => $scrip->ConditionObj->Name(),
-                Template => $scrip->TemplateObj->Name(),
-                Action => $scrip->ActionObj->Name(),
-                };
-                push (@{$ds->{'Global'}->{'Scrip'}}, $scrip_ds);
-
-	} 
-
-
-my $ACL = RT::ACL->new($RT::SystemUser);
-$ACL->LimitToSystem();
-
-foreach my $ace ( @{ $ACL->ItemsArrayRef } ) {
-        my $right_ds = { PrincipalType => $ace->PrincipalType,
-                         PrincipalId => $ace->PrincipalObj->Id,
-                         Name => $ace->RightName };
-        if ($ace->PrincipalType eq 'Group' && $ace->PrincipalObj->Pseudo) {
-                $right_ds->{'Role'} =  $ace->PrincipalObj->Name;
-                delete $right_ds->{'PrincipalId'};
-                }
-
-        push (
-            @{ $ds->{'Global'}->{'Right'}}, $right_ds);
-}
-
-my $blank_Link = RT::Link->new($RT::SystemUser);
-$blank_Link->_Accessible( 'Foo', 'read' );
-$acc = $blank_Link->{_AccessibleCache};
-my $links = RT::Links->new($RT::SystemUser);
-$links->UnLimit();
-while (my $l = $links->Next) {
+    my $blank_Link = RT::Link->new($RT::SystemUser);
+    $blank_Link->_Accessible( 'Foo', 'read' );
+    $acc = $blank_Link->{_AccessibleCache};
+    my $links = RT::Links->new($RT::SystemUser);
+    $links->UnLimit();
+    while ( my $l = $links->Next ) {
         my $link_ds;
-            foreach my $param ( sort keys %$acc ) {
-                    $link_ds->{$param} = $l->_Value($param)
-                              if ( $l->_Value($param) );
-                                  }
-        push (@{$ds->{'Link'}}, $link_ds);
-}
-open(META, ">$export_dir/metadata");
-print META "sub Data {\n";
-print META scalar Dumper($ds);
-print META "}\n1;\n";
-close (META);
-undef($ds);
-my $tix = RT::Faketix->new($RT::SystemUser);
-$tix->Limit( FIELD => 'id', OPERATOR => "!=", VALUE => "0" );
-while ( my $t = $tix->Next ) {
-        my $tick_ds;
-    print STDERR "Exporting ticket " . $t->Id . "\n";
-     $export_dir_counter ++; 
-       if ($export_dir_counter > $export_dir_limit) { 
-               $export_dir_suffix ++; 
-               $export_dir = "$export_dir_base.$export_dir_suffix"; 
-               $export_dir_counter = 0; 
-               &checkDirExists($export_dir); 
-               print STDERR "* export_dir changed - $export_dir\n"; 
- 
-       } 
-
-    foreach my $param ( sort keys %{ $t->{_AccessibleCache} }, 'id' ) {
-        $tick_ds->{$param} = $t->_Value($param)
-          if ( $t->_Value($param) );
+        foreach my $param ( sort keys %$acc ) {
+            $link_ds->{$param} = $l->_Value($param)
+              if ( $l->_Value($param) );
+        }
+        push ( @{ $ds->{'Link'} }, $link_ds );
     }
-    my $watchers = $t->Watchers();
-    my $watchers_ds; 
-    foreach my $w ( @{ $watchers->ItemsArrayRef } ) {
-        my $ds = { Type => $w->Type,
-                   Email => $w->Email,
-                   Id => $w->Id };
+    open( META, ">$export_dir_base/metadata" );
+    print META "sub Data {\n";
+    print META scalar Dumper($ds);
+    print META "}\n";
+    print META "sub ExportType {return('full')}\n";
+    print META "\n1;\n";
+    close(META);
+    undef($ds);
 
-        push (@{$watchers_ds}, $ds);
+    export_tickets();
+}
+else {
+    my @users = export_users($ds);
+    $ds->{'User'} = \@users;
+
+    open( META, ">$export_dir_base/metadata" );
+    print META "sub Data {\n";
+    print META scalar Dumper($ds);
+    print META "}\n";
+    print META "sub ExportType {return('incremental')}\n";
+    print META "\n1;\n";
+    close(META);
+    undef($ds);
+    export_tickets($since);
+}
+
+# {{{ export_tickets
+sub export_tickets {
+    my $since = shift;
+    my $tix   = RT::Faketix->new($RT::SystemUser);
+    $tix->Limit( FIELD => 'id', OPERATOR => "!=", VALUE => "0" );
+    if ($since) {
+        $tix->Limit( FIELD    => 'LastUpdated',
+                     OPERATOR => ">=",
+                     VALUE    => $since );
+    }
+    while ( my $t = $tix->Next ) {
+        my $tick_ds;
+        print STDERR "\nExporting ticket " . $t->Id ;
+        $export_dir_counter++;
+        if ( $export_dir_counter > $export_dir_limit ) {
+            $export_dir_counter++;
+            $export_dir = "$export_dir_base" . "tickets-" . $export_dir_counter;
+            $export_dir_counter = 0;
+            &checkDirExists($export_dir);
+            print STDERR "* export_dir changed - $export_dir\n";
+
+        }
+
+        foreach my $param ( sort keys %{ $t->{_AccessibleCache} }, 'id' ) {
+            $tick_ds->{$param} = $t->_Value($param)
+              if ( $t->_Value($param) );
+        }
+        $tick_ds->{'Queue'} = $t->QueueObj->Name;
+
+        my $watchers = $t->Watchers();
+        my $watchers_ds;
+        foreach my $w ( @{ $watchers->ItemsArrayRef } ) {
+            my $ds = { Type  => $w->Type,
+                       Email => $w->Email,
+                       Id    => $w->Id };
+
+            push ( @{$watchers_ds}, $ds );
         }
         $tick_ds->{'Watchers'} = $watchers_ds;
-    
 
+        my $selects = $t->QueueObj->KeywordSelects();
+        while ( my $ks = $selects->Next ) {
+            my $keywords = $t->KeywordsObj( $ks->Id );
+            while ( my $key = $keywords->Next ) {
 
-
-    my $selects = $t->QueueObj->KeywordSelects();
-    while ( my $ks = $selects->Next ) {
-        my $keywords = $t->KeywordsObj( $ks->Id );
-        while ( my $key = $keywords->Next ) {
-
-            my $name = $key->KeywordObj->RelativePath( $ks->KeywordObj );
-            push ( @{ $tick_ds->{'CustomFields'} ->{ $ks->id } }, $name
-            );
-        }
-    }
-
-
-
-my $blank_Transaction = RT::Transaction->new($RT::SystemUser);
-$blank_Transaction->_Accessible( 'Foo', 'read' );
-my $tracc = $blank_Transaction->{_AccessibleCache};
-    my $tr = $t->Transactions;
-    while ( my $trans = $tr->Next ) {
-        my $trans_ds;
-        print STDERR "  Exporting transaction " . $trans->Id . "\n";
-        foreach my $tr_param ( sort keys %$tracc, 'id' ) {
-            $trans_ds->{$tr_param} = $trans->_Value($tr_param)
-              if ( $trans->_Value($tr_param) );
-        }
-        my $attachments = RT::Attachments->new($RT::SystemUser);
-        $attachments->Limit(
-            FIELD    => 'TransactionId',
-            OPERATOR => "=",
-            VALUE    => $trans->Id
-        );
-
-        while ( my $att = $attachments->Next ) {
-                my $att_ds;
-            print STDERR "   Exporting attachment " . $att->Id . "\n";
-            foreach my $att_param ( sort keys %{ $att->{_AccessibleCache} } ) {
-                $att_ds->{$att_param} = $att->_Value($att_param)
-                  if ( $att->_Value($att_param) );
+                my $name = $key->KeywordObj->RelativePath( $ks->KeywordObj );
+                push ( @{ $tick_ds->{'CustomFields'}->{ $ks->id } }, $name );
             }
-                push (@{$trans_ds->{'Attachment'}}, $att_ds);
         }
 
-        push (@{$tick_ds->{'Transaction'}}, $trans_ds);
-    }
+        my $blank_Transaction = RT::Transaction->new($RT::SystemUser);
+        $blank_Transaction->_Accessible( 'Foo', 'read' );
+        my $tracc = $blank_Transaction->{_AccessibleCache};
+        my $tr    = $t->Transactions;
+        while ( my $trans = $tr->Next ) {
+            my $trans_ds;
+            print STDERR ".";
+            foreach my $tr_param ( sort keys %$tracc, 'id' ) {
+                $trans_ds->{$tr_param} = $trans->_Value($tr_param)
+                  if ( $trans->_Value($tr_param) );
+            }
+            my $attachments = RT::Attachments->new($RT::SystemUser);
+            $attachments->Limit( FIELD    => 'TransactionId',
+                                 OPERATOR => "=",
+                                 VALUE    => $trans->Id );
 
-        
-open(TICK, ">$export_dir/t-".$tick_ds->{id});
-print TICK "sub Data {\n";
-print TICK scalar Dumper($tick_ds);
-print TICK "}\n1;\n";
-close (TICK);
+            while ( my $att = $attachments->Next ) {
+                my $att_ds;
+                print STDERR ".";
+                foreach
+                  my $att_param ( sort keys %{ $att->{_AccessibleCache} } ) {
+                    $att_ds->{$att_param} = $att->_Value($att_param)
+                      if ( $att->_Value($att_param) );
+                }
+                push ( @{ $trans_ds->{'Attachment'} }, $att_ds );
+            }
+
+            push ( @{ $tick_ds->{'Transaction'} }, $trans_ds );
+        }
+
+        open( TICK, ">$export_dir/t-" . $tick_ds->{id} );
+        print TICK "no warnings qw/redefine/; \n sub Data {\n";
+        print TICK scalar Dumper($tick_ds);
+        print TICK "}\n1;\n";
+        close(TICK);
+
+    }
+}
+# }}}
+
+sub export_users {
+    my $ds = shift;
+    my $since = ( shift || 0 );
+    my $blank_User = RT::User->new($RT::SystemUser);
+    $blank_User->_Accessible( 'Foo', 'read' );
+    my $acc = $blank_User->{_AccessibleCache};
+
+    my $users = RT::Users->new($RT::SystemUser);
+    if ($since) {
+        $users->Limit( FIELD    => 'LastUpdated', OPERATOR => ">=", VALUE    => $since );
+    }
+    else {
+        $users->UnLimit();
+    }
+    $users->{'find_disabled_rows'} = 1;
+
+    my @users;
+    foreach my $user ( @{ $users->ItemsArrayRef } ) {
+        my $user_ds;
+        foreach my $param ( sort keys %$acc, 'id' ) {
+            $user_ds->{$param} = $user->_Value($param)
+              if ( $user->_Value($param) );
+        }
+        push ( @users, $user_ds );
+    }
+    return (@users);     
+}
+
+sub export_queues {
+    my $ds = shift;
+
+    my $blank_Queue = RT::Queue->new($RT::SystemUser);
+    $blank_Queue->_Accessible( 'Foo', 'read' );
+    my $acc = $blank_Queue->{_AccessibleCache};
+
+    my $Queues = RT::Queues->new($RT::SystemUser);
+    $Queues->UnLimit();
+    $Queues->{'find_disabled_rows'} = 1;
+
+    foreach my $Queue ( @{ $Queues->ItemsArrayRef } ) {
+        my $queue_ds;
+        foreach my $param ( sort keys %$acc, 'id' ) {
+            $queue_ds->{$param} = $Queue->_Value($param)
+              if ( $Queue->_Value($param) );
+        }
+        my $watchers = $Queue->Watchers();
+        my $watchers_ds;
+        foreach my $w ( @{ $watchers->ItemsArrayRef } ) {
+            my $ds = { Type  => $w->Type,
+                       Email => $w->Email,
+                       Id    => $w->Id };
+
+            push ( @{$watchers_ds}, $ds );
+        }
+        $queue_ds->{'Watchers'} = $watchers_ds;
+
+        my $blank_KeywordSelect = RT::KeywordSelect->new($RT::SystemUser);
+        $blank_KeywordSelect->_Accessible( 'Foo', 'read' );
+        my $ksacc = $blank_KeywordSelect->{_AccessibleCache};
+
+        my $ks = $Queue->KeywordSelects();
+        $ks->{'find_disabled_rows'} = 1;
+        foreach my $keysel ( @{ $ks->ItemsArrayRef } ) {
+            my $ks_ds;
+            foreach my $param ( sort keys %$ksacc, 'id' ) {
+                $ks_ds->{$param} = $keysel->_Value($param)
+                  if ( $keysel->_Value($param) );
+            }
+            my $descendents = $keysel->KeywordObj->Descendents;
+            foreach my $desc ( keys %{$descendents} ) {
+                push @{ $ks_ds->{Value} }, $descendents->{$desc};
+
+            }
+            push ( @{ $queue_ds->{'CustomField'} }, $ks_ds );
+        }
+
+        my $ACL = RT::ACL->new($RT::SystemUser);
+        $ACL->LimitToQueue( $Queue->Id );
+
+        foreach my $ace ( @{ $ACL->ItemsArrayRef } ) {
+            my $right_ds = { PrincipalType => $ace->PrincipalType,
+                             PrincipalId   => $ace->PrincipalObj->Id,
+                             Name          => $ace->RightName };
+            if ( $ace->PrincipalType eq 'Group' && $ace->PrincipalObj->Pseudo )
+            {
+                $right_ds->{'Role'} = $ace->PrincipalObj->Name;
+                delete $right_ds->{'PrincipalId'};
+            }
+            push ( @{ $queue_ds->{'Right'} }, $right_ds );
+        }
+        my $scrips = RT::Scrips->new($RT::SystemUser);
+        $scrips->LimitToQueue( $Queue->Id );
+        foreach my $scrip ( @{ $scrips->ItemsArrayRef } ) {
+            my $scrip_ds = { Condition => $scrip->ConditionObj->Name(),
+                             Template  => $scrip->TemplateObj->Name(),
+                             Action    => $scrip->ActionObj->Name(), };
+            push ( @{ $queue_ds->{'Scrip'} }, $scrip_ds );
+        }
+        push ( @{ $ds->{'Queue'} }, $queue_ds );
+
+    }
 
 }
 
-
-sub checkDirExists { 
-      my ($dir) = @_; 
-      if ( ! ( -d "$dir") ) { 
-              mkdir ("$dir", 0771); 
-      } 
+sub checkDirExists {
+    my ($dir) = @_;
+    if ( !( -d "$dir" ) ) {
+        mkdir( "$dir", 0771 );
+    }
 }

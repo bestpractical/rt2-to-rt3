@@ -6,9 +6,12 @@
 package RT;
 use strict;
 
+no warnings qw/redefine/;
+$| = 1;
+
 use Data::Dumper;
 BEGIN { $RT::DontCacheSearchBuilderRecords = 1; }
-use vars qw($dbh $debug);
+use vars qw($dbh $debug %user_objects);
 $debug = 0;
 
 BEGIN {
@@ -22,9 +25,12 @@ use vars qw/$ENCODING $DIR/;
 
 $ENCODING = "iso-8859-1";
 
+my $import_global_metadata = 1;
 my $import_users   = 1;
 my $import_groups  = 1;
+my $import_queues = 1;
 my $import_tickets = 1;
+my $import_links = 1;
 use lib ( "/opt/rt3/lib");
 
 use Getopt::Long;
@@ -56,74 +62,54 @@ my $queue_map;
 my $cf_map;
 my @errors;
 
-foreach my $scrip ( @{ $VAR1->{'Global'}->{'Scrip'} } ) {
+if ( ExportType() eq 'incremental' ) {
+    my $users = $VAR1->{'User'};
+    foreach my $user ( @{$users} ) {
+        encode_hashref($user);
+        my $obj = load_user( $user->{'Name'} );
+        unless ( $obj->Id ) {
+            $obj = load_user( $user->{'EmailAddress'} );
+        }
+        if ( $obj->Id ) {
+            $user_map->{ $user->{'id'} } = $obj->id;
+            delete $user->{'Name'};
+            delete $user->{'EmailAddress'};
+            delete $user->{'Privileged'};
+            delete $user->{'id'};
+            foreach my $field ( keys %$user ) {
+                $obj->__Set( Field => $field, Value => $user->{$field} );
+            }
 
-    encode_hashref($scrip);
-
-    my $so = RT::Scrip->new($RT::SystemUser);
-
-    $scrip->{'Template'}  =~ s/(.)([A-Z])/$1 $2/g;
-    $scrip->{'Condition'} =~ s/(.)([A-Z])/$1 $2/g;
-    $scrip->{'Action'}    =~ s/(.)([A-Z])/$1 $2/g;
-    $scrip->{'Action'}    =~ s/Admin Watchers/AdminCcs/;
-    $scrip->{'Action'}    =~ s/Admin Ccs/AdminCcs/;
-    $scrip->{'Action'}    =~ s/Requestor$/Requestors/;
-
-    my %params = ( Template       => $scrip->{'Template'},
-                   ScripAction    => $scrip->{'Action'},
-                   ScripCondition => $scrip->{'Condition'},
-                   Description    => "Imported from RT 2.0" );
-
-    $so->Create(%params);
-
-    unless ( $so->Id ) {
-        push @errors, "Could not create scrip: " . Dumper($scrip);
+        }
+        else {
+                encode_hashref($user);
+            import_user($user);
+        }
     }
+    import_tickets();
 
+}
+else {
+
+
+foreach my $scrip ( @{ $VAR1->{'Global'}->{'Scrip'} } ) {
+        import_scrip($scrip, 0 );
 }
 
 if ($import_users) {
-
+    print "Importing users\n";
     my $users = $VAR1->{'User'};
     $RT::Handle->SimpleQuery("DELETE FROM Users where Name='root'");
 
     foreach my $user ( @{$users} ) {
-
-        $user->{'Name'} = "Unnamed user ".$user->{'id'} unless ($user->{'Name'});
-        if ( $user->{'Name'} eq 'Nobody' ) {
-            $user_map->{ $user->{'id'} } = $RT::Nobody->Id;
-            next;
-        }
-
-        if ( $user->{'Name'} eq 'RT_System' ) {
-            $user_map->{ $user->{'id'} } = $RT::SystemUser->Id;
-            next;
-        }
-        #         import user
-        my $user_obj = RT::User->new($RT::SystemUser);
-        delete $user->{'Disabled'};
-        my $old_id = $user->{'id'};
-        delete $user->{'id'};
-        $user->{'CryptedPassword'} = $user->{'Password'}
-          unless ( $user->{'Password'} =~ '^\*' );
-        delete $user->{'Password'};
-        print "Creating $old_id - " . $user->{'Name'} . "\n";
-        encode_hashref($user);
-        $user_obj->LoadByEmail($user->{'EmailAddress'});
-        unless ($user_obj->Id) {
-        my ($uid, $umsg) = $user_obj->Create( %{$user} );
-        }
-        my $id = $user_obj->Id();
-        die "Failed to create user for" . scalar Dumper $user unless ($id);
-        $user_map->{$old_id} = $id;
-
+        import_user($user);
     }
-
+        print "\n";
 }
 
 # find all groups
 if ($import_groups) {
-
+    print "Importing groups\n";
     my $groups = $VAR1->{'Group'};
 
     # foreach group
@@ -147,22 +133,12 @@ if ($import_groups) {
         #         import members
 
         foreach my $member ( @{$members} ) {
-            print "Adding $member to " . $g->Id . "\n";
             $g->AddMember( $user_map->{$member} );
         }
     }
 }
 
-#print scalar Dumper $groups;
-#
-#
-# for global
-#
-#         import custom fields
-#
-#         import templates
-#
-#         import acls
+if ($import_global_metadata) {
 
 foreach my $right ( @{ $VAR1->{'Global'}->{'Right'} } ) {
     my $princ = RT::Principal->new($RT::SystemUser);
@@ -221,12 +197,14 @@ foreach my $cf ( @{ $VAR1->{'Global'}->{'CustomField'} } ) {
         $cfobj->AddValue( Name => $val );
     }
 }
+}
+
 
 # find all queues in RT 2.0
 
 #
 # for each queue
-
+if ($import_queues) {
 $RT::Handle->SimpleQuery("DELETE FROM Queues where id = 1");
 
 my $queues = $VAR1->{'Queue'};
@@ -305,215 +283,20 @@ foreach my $queue ( @{$queues} ) {
         }
     }
     foreach my $scrip ( @{ $temp{'Scrip'} } ) {
-        encode_hashref($scrip);
-        $scrip->{'Template'}  =~ s/(.)([A-Z])/$1 $2/g;
-        $scrip->{'Condition'} =~ s/(.)([A-Z])/$1 $2/g;
-        $scrip->{'Action'}    =~ s/(.)([A-Z])/$1 $2/g;
-        $scrip->{'Action'}    =~ s/Admin Watchers/AdminCcs/;
-        $scrip->{'Action'}    =~ s/Admin Ccs/AdminCcs/;
-        $scrip->{'Action'}    =~ s/Requestor$/Requestors/;
-
-        my $so = RT::Scrip->new($RT::SystemUser);
-        $so->Create( Template       => $scrip->{'Template'},
-                     ScripAction    => $scrip->{'Action'},
-                     ScripCondition => $scrip->{'Condition'},
-                     Description    => "Imported from RT 2.0",
-                     Queue          => $queue_obj->Id );
-
-        unless ( $so->Id ) {
-            push @errors, "Could not create scrip: " . Dumper($scrip);
-        }
-
+        import_scrip($scrip, $queue_obj->Id);
     }
 
 }
-
-#
-#         import watchers
-#
-#         import templates
-#
-#         import acls
-#
-#         import scrips
-#
-#Find all links
-
-#
-# for each ticke
-
-if ($import_tickets) {
-        
-    opendir (TOPDIR, $DIR) || die "Couldn't open $DIR";
-    while (my $subdir = readdir(TOPDIR)) {
-        next if ($subdir =~ /\./);
-        next unless (-d $subdir);
-    opendir (DIR, $subdir) || die "Couldn't open $DIR";
-    while (my $file = readdir(DIR)) {
-        next unless ($file =~ /^t-(\d+)$/);
-        no warnings qw/redefine/;
-        require "$DIR/$file" || die "Couldn't read ticket file $file";
-        my $ticket = Data();
-        my %temp;
-        print "Importing ticket " . $ticket->{'id'} . "\n";
-
-        my $tick_object = RT::Ticket->new($RT::SystemUser);
-
-        $ticket->{'Status'} = 'deleted' if ( $ticket->{'Status'} eq 'dead' );
-
-        $ticket->{'Queue'} = $queue_map->{ $ticket->{'Queue'} };
-        $ticket->{'Owner'} = $user_map->{ $ticket->{'Owner'} };
-
-        $ticket->{'Creator'}       = $user_map->{ $ticket->{'Creator'} };
-        $ticket->{'LastUpdatedBy'} = $user_map->{ $ticket->{'LastUpdatedBy'} };
-
-        $ticket->{'_RecordTransaction'} = 0;
-        foreach my $attr qw(Watchers Transaction CustomFields) {
-            $temp{$attr} = $ticket->{$attr};
-            delete $ticket->{$attr};
-        }
-
-        encode_hashref($ticket);
-
-        foreach my $watcher ( @{ $temp{'Watchers'} } ) {
-            my $val;
-            $val = $watcher->{'Email'};
-            push ( @{ $ticket->{ $watcher->{'Type'} } }, $val );
-
-        }
-
-        foreach my $cf ( keys %{ $temp{'CustomFields'} } ) {
-            my $cfid = $cf_map->{$cf};
-            $ticket->{ 'CustomField-' . $cfid } = $temp{'CustomFields'}->{$cf};
-
-        }
-
-        $tick_object->Create( %{$ticket} );
-
-        unless ( $tick_object->Id == $ticket->{id} ) {
-            die "Couldn't create ticket $ticket " . Dumper($ticket);
-        }
-
-        #         import ticket keywords
-
-        #import ticket transactions
-        foreach my $t ( @{ $temp{Transaction} } ) {
-
-            print "            transaction " . $t->{'id'} . "\n";
-            $t->{'ActivateScrips'} = 0;
-            if ( $t->{'Type'} eq 'Status' ) {
-                if ( $t->{'NewValue'} eq 'dead' ) {
-                    $t->{'NewValue'} = 'deleted';
-                }
-
-                if ( $t->{'OldValue'} eq 'dead' ) {
-                    $t->{'OldValue'} = 'deleted';
-                }
-
-            }
-            if ( $t->{'Type'} =~ /^AddWatcher$/ ) {
-                my $u = RT::User->new($RT::SystemUser);
-                $u->Load( $t->{'NewValue'} );
-                unless ( $u->Id ) {
-                    $u->LoadByEmail( $t->{'NewValue'} );
-                }
-                unless ( $u->Id ) {
-
-                    my $new_user = RT::User->new($RT::SystemUser);
-
-                    my ( $Val, $Message ) = $new_user->Create(
-                               Name         => $t->{'NewValue'},
-                               EmailAddress => $t->{'NewValue'},
-                               RealName     => $t->{'NewValue'},
-                               Privileged   => 0,
-                               Comments => 'Autocreated when added as a watcher'
-                    );
-                    unless ($Val) {
-                        $RT::Logger->error( "Failed to create user "
-                                            . $t->{'NewValue'} . ": "
-                                            . $Message );
-
-                        # Deal with the race condition of two account creations at once
-                        $new_user->LoadByEmail( $t->{'NewValue'} );
-                    }
-                    $u->Load( $new_user->PrincipalId );
-                }
-                $t->{'NewValue'} = $u->Id;
-            }
-
-            if ( $t->{'Type'} =~ /^DelWatcher$/ ) {
-                my $u = RT::User->new($RT::SystemUser);
-                $u->Load( $t->{'OldValue'} );
-                unless ( $u->Id ) {
-                    $u->LoadByEmail( $t->{'OldValue'} );
-                }
-                unless ( $u->Id ) {
-
-                    my $new_user = RT::User->new($RT::SystemUser);
-
-                    my ( $Val, $Message ) = $new_user->Create(
-                               Name         => $t->{'OldValue'},
-                               EmailAddress => $t->{'OldValue'},
-                               RealName     => $t->{'OldValue'},
-                               Privileged   => 0,
-                               Comments => 'Autocreated when added as a watcher'
-                    );
-                    unless ($Val) {
-                        $RT::Logger->error( "Failed to create user "
-                                            . $t->{'OldValue'} . ": "
-                                            . $Message );
-
-                        # Deal with the race condition of two account creations at once
-                        $new_user->LoadByEmail( $t->{'OldValue'} );
-                    }
-                    $u->Load( $new_user->PrincipalId );
-                }
-                $t->{'OldValue'} = $u->Id;
-            }
-
-             if ($t->{'Type'} eq 'Set' and $t->{'Field'} eq 'Queue') {
-                        $t->{'OldValue'} = $queue_map->{$t->{'OldValue'}};
-                        $t->{'NewValue'} = $queue_map->{$t->{'NewValue'}};
-
-                } 
-
-            if ( $t->{'Type'} =~ /^(Force|Give|Take|Untake)$/ ) {
-                $t->{'OldValue'} = $user_map->{ $t->{OldValue} };
-                $t->{'NewValue'} = $user_map->{ $t->{NewValue} };
-            }
-
-            my $trans_obj = RT::Transaction->new($RT::SystemUser);
-            $t->{'Creator'} = $user_map->{ $t->{'Creator'} };
-            my $attach = $t->{'Attachment'};
-            delete $t->{'Attachment'};
-
-            encode_hashref($t);
-            $trans_obj->Create( %{$t} );
-            unless ( $trans_obj->Id == $t->{'id'} ) {
-                die "Couldn't create trans  " . $t->{'id'} . " " . Dumper($t);
-            }
-
-            foreach my $a ( @{$attach} ) {
-                if ( $a->{ContentType} =~ '^text/' ) {
-                    encode_hashref($a);
-                }
-                my $att = RT::Attachment->new($RT::SystemUser);
-                $att->Import( %{$a} );
-                print "               attachment " . $att->Id . "\n";
-                unless ( $att->Id ) {
-                    die "Couldn't create attachment $a " . Dumper($a);
-
-                }
-            }
-        }
-
-    }
-  }
 }
 
+     import_tickets() if ($import_tickets) 
 
+}
 
-foreach my $link ( @{ $VAR1->{'Link'} } ) {
+if ($import_links) {
+
+     print "Importing links\n";
+     foreach my $link ( @{ $VAR1->{'Link'} } ) {
     my $l = RT::Link->new($RT::SystemUser);
 
     $link->{'Base'}   =~ s#/(.*?)/ticket/#/ticket/#;
@@ -525,9 +308,10 @@ foreach my $link ( @{ $VAR1->{'Link'} } ) {
                       Base   => ( $link->{'LocalBase'} || $link->{'Base'} ) );
     unless ( $l->Id ) {
         if ( $link->{'LocalBase'} != $link->{'LocalTarget'} ) {
-            push ( @errors, "Couldn't create link  " . $msg . Dumper($link) );
+            push ( @errors, "Couldn't create link  from ". $link->{'Base'} ." to ".$link->{'Target'});
         }
     }
+}
 }
 
 print join ( "\n", @errors );
@@ -560,3 +344,286 @@ sub encode_hashref {
     }
 
 }
+
+
+sub import_scrip { 
+        my $scrip = shift;
+        my $queue = (shift || '0');
+    encode_hashref($scrip);
+
+    my $so = RT::Scrip->new($RT::SystemUser);
+
+    $scrip->{'Template'}  =~ s/(.)([A-Z])/$1 $2/g;
+    $scrip->{'Condition'} =~ s/(.)([A-Z])/$1 $2/g;
+    $scrip->{'Action'}    =~ s/(.)([A-Z])/$1 $2/g;
+    $scrip->{'Action'}    =~ s/Admin Watchers/AdminCcs/;
+    $scrip->{'Action'}    =~ s/Admin Ccs/AdminCcs/;
+    $scrip->{'Action'}    =~ s/Requestor$/Requestors/;
+
+    my %params = ( Template       => $scrip->{'Template'},
+                   ScripAction    => $scrip->{'Action'},
+                   ScripCondition => $scrip->{'Condition'},
+                     Queue          => $queue,
+                   Description    => "Imported from RT 2.0" );
+
+      #Notify All watchers is now two seperate scrips
+     if ($params{'ScripAction'} =~ /^Notify All Watchers(.*)$/) {
+                $params{'ScripAction'} = 'Notify Owner'.$1;
+                my $ownerscrip = RT::Scrip->new($RT::SystemUser);
+                $ownerscrip->Create(%params);
+
+                unless ( $so->Id ) {
+                        push @errors, "Could not create scrip: " .$params{'ScripCondition'}." ".$params{'ScripAction'}." with template ".$params{'Template'} . " in queue". $params{'Queue'};
+                }
+                $params{'ScripAction'} = 'Notify Requestors, Ccs and AdminCcs'.$1;
+                 
+
+        }
+
+    $so->Create(%params);
+
+    unless ( $so->Id ) {
+                        push @errors, "Could not create scrip: " .$params{'ScripCondition'}." ".$params{'ScripAction'}." with template".$params{'Template'} . " in queue". $params{'Queue'};
+    }
+
+
+}
+
+sub load_user {
+    my $user_id = shift;
+    if ( exists $user_objects{$user_id} ) {
+        return ( $user_objects{$user_id} );
+    }
+    else {
+        $user_objects{$user_id} = RT::User->new($RT::SystemUser);
+        if ( $user_id =~ /@/ ) {
+            $user_objects{$user_id}->LoadByCols( EmailAddress =>$user_id);
+            unless ( $user_objects{$user_id}->id ) {
+                $user_objects{$user_id}->LoadByCols(Name => $user_id);
+            }
+            unless ( $user_objects{$user_id}->id ) {
+                $user_objects{$user_id}->LoadByCols(id => $user_id);
+            }
+        }
+        else {
+            $user_objects{$user_id}->Load($user_id);
+            unless ( $user_objects{$user_id}->id ) {
+                $user_objects{$user_id}->LoadByEmail($user_id);
+            }
+        }
+
+        #                unless ($user_objects{$user_id}->id) {
+        #                  $user_objects{$user_id} = undef;
+        #                }
+        return ( $user_objects{$user_id} );
+    }
+
+}
+# {{{ import tickets
+sub import_tickets {
+    print "Importing tickets";    
+    opendir (TOPDIR, $DIR) || die "Couldn't open $DIR";
+    while (my $subdir = readdir(TOPDIR)) {
+        next unless ($subdir =~ /^tickets-/i);
+    opendir (DIR, $DIR."/".$subdir) || die "Couldn't open $subdir";
+    while (my $file = readdir(DIR)) {
+        print ".";
+        next unless ($file =~ /^t-(\d+)$/);
+        require "$DIR/$subdir/$file" || die "Couldn't read ticket file $file";
+        my $ticket = Data();
+        my %temp;
+
+       
+        if (ExportType() eq 'incremental') {
+         my $id = $ticket->{'id'};
+        my $t = RT::Ticket->new($RT::SystemUser);
+        $t->Load($id);
+        if ($t->Id) {
+        # Blow away ticket watchers
+        $RT::Handle->SimpleQuery("DELETE FROM Groups WHERE Domain = 'RT::Ticket-Role' AND INSTANCE = '$id'");
+        # Blow away ticket attachments
+        my $txns = $t->Transactions;
+        while (my $txn  = $txns->Next) {
+                my $att = $txn->Attachments();
+                while (my $attach = $att->Next) {
+                        $attach->Delete();
+                }
+                $RT::Handle->SimpleQuery("DELETE FROM Transactions WHERE id='".$txn->id."'");
+        }
+        $RT::Handle->SimpleQuery("DELETE FROM CustomFieldValues WHERE Ticket = '$id'");
+                $RT::Handle->SimpleQuery("DELETE FROM Tickets WHERE id = '$id'"); 
+        }
+        }
+        my $tick_object = RT::Ticket->new($RT::SystemUser);
+
+        $ticket->{'Status'} = 'deleted' if ( $ticket->{'Status'} eq 'dead' );
+
+        $ticket->{'Owner'} = $user_map->{ $ticket->{'Owner'} };
+
+        $ticket->{'Creator'}       = $user_map->{ $ticket->{'Creator'} };
+        $ticket->{'LastUpdatedBy'} = $user_map->{ $ticket->{'LastUpdatedBy'} };
+
+        $ticket->{'_RecordTransaction'} = 0;
+        foreach my $attr qw(Watchers Transaction CustomFields) {
+            $temp{$attr} = $ticket->{$attr};
+            delete $ticket->{$attr};
+        }
+
+        encode_hashref($ticket);
+
+        foreach my $watcher ( @{ $temp{'Watchers'} } ) {
+            my $val;
+            $val = $watcher->{'Email'};
+            push ( @{ $ticket->{ $watcher->{'Type'} } }, $val );
+
+        }
+
+        foreach my $cf ( keys %{ $temp{'CustomFields'} } ) {
+            my $cfid = $cf_map->{$cf};
+            $ticket->{ 'CustomField-' . $cfid } = $temp{'CustomFields'}->{$cf};
+
+        }
+
+        $tick_object->Create( %{$ticket} );
+
+        unless ( $tick_object->Id == $ticket->{id} ) {
+            die "Couldn't create ticket $ticket " . Dumper($ticket);
+        }
+
+
+        #import ticket transactions
+        foreach my $t ( @{ $temp{Transaction} } ) {
+
+            $t->{'ActivateScrips'} = 0;
+            if ( $t->{'Type'} eq 'Status' ) {
+                if ( $t->{'NewValue'} eq 'dead' ) {
+                    $t->{'NewValue'} = 'deleted';
+                }
+
+                if ( $t->{'OldValue'} eq 'dead' ) {
+                    $t->{'OldValue'} = 'deleted';
+                }
+
+            }
+            if ( $t->{'Type'} =~ /^AddWatcher$/ ) {
+                $t->{'NewValue'} ||= $RT::Nobody->Id;
+                my $u = load_user ($t->{'NewValue'} ||'Nobody') ;
+                unless ( $u->Id ) {
+
+                    my $new_user = RT::User->new($RT::SystemUser);
+
+                    my ( $Val, $Message ) = $new_user->Create(
+                               Name         => $t->{'NewValue'},
+                               EmailAddress => $t->{'NewValue'},
+                               RealName     => $t->{'NewValue'},
+                               Privileged   => 0,
+                               Comments => 'Autocreated when added as a watcher'
+                    );
+                    unless ($Val) {
+                        $RT::Logger->error( "Failed to create user "
+                                            . $t->{'NewValue'} . ": "
+                                            . $Message );
+
+                    }
+                    $u=load_user($new_user->Id);
+                }
+                $t->{'NewValue'} = $u->Id;
+            }
+
+            if ( $t->{'Type'} =~ /^DelWatcher$/ ) {
+                my $u= load_user( $t->{'OldValue'} || 'Nobody' );
+                unless ( $u->Id ) {
+
+                    my $new_user = RT::User->new($RT::SystemUser);
+
+                    my ( $Val, $Message ) = $new_user->Create(
+                               Name         => $t->{'OldValue'},
+                               EmailAddress => $t->{'OldValue'},
+                               RealName     => $t->{'OldValue'},
+                               Privileged   => 0,
+                               Comments => 'Autocreated when added as a watcher'
+                    );
+                    unless ($Val) {
+                        $RT::Logger->error( "Failed to create user "
+                                            . $t->{'OldValue'} . ": "
+                                            . $Message );
+
+                    }
+                    $u = load_user( $new_user->Id );
+                }
+                $t->{'OldValue'} = $u->Id;
+            }
+
+             if ($t->{'Type'} eq 'Set' and $t->{'Field'} eq 'Queue') {
+                        $t->{'OldValue'} = $queue_map->{$t->{'OldValue'}};
+                        $t->{'NewValue'} = $queue_map->{$t->{'NewValue'}};
+
+                } 
+
+            if ( $t->{'Type'} =~ /^(Force|Give|Take|Untake)$/ ) {
+                $t->{'OldValue'} = $user_map->{ $t->{OldValue} };
+                $t->{'NewValue'} = $user_map->{ $t->{NewValue} };
+            }
+
+            my $trans_obj = RT::Transaction->new($RT::SystemUser);
+            $t->{'Creator'} = $user_map->{ $t->{'Creator'} };
+            my $attach = $t->{'Attachment'};
+            delete $t->{'Attachment'};
+
+            encode_hashref($t);
+            $trans_obj->Create( %{$t} );
+            unless ( $trans_obj->Id == $t->{'id'} ) {
+                die "Couldn't create trans  " . $t->{'id'} . " " . Dumper($t);
+            }
+
+            foreach my $a ( @{$attach} ) {
+                if ( $a->{ContentType} =~ '^text/' ) {
+                    encode_hashref($a);
+                }
+                my $att = RT::Attachment->new($RT::SystemUser);
+                $att->Import( %{$a} );
+                unless ( $att->Id ) {
+                    die "Couldn't create attachment $a " . Dumper($a);
+
+                }
+            }
+        }
+
+    }
+  }
+}
+
+# }}}
+# {{{ import_user
+sub import_user {
+        my $user = shift;
+
+        $user->{'Name'} = "Unnamed user ".$user->{'id'} unless ($user->{'Name'});
+        if ( $user->{'Name'} eq 'Nobody' ) {
+            $user_map->{ $user->{'id'} } = $RT::Nobody->Id;
+            next;
+        }
+
+        if ( $user->{'Name'} eq 'RT_System' ) {
+            $user_map->{ $user->{'id'} } = $RT::SystemUser->Id;
+            next;
+        }
+        #         import user
+        my $user_obj = RT::User->new($RT::SystemUser);
+        delete $user->{'Disabled'};
+        my $old_id = $user->{'id'};
+        delete $user->{'id'};
+        $user->{'CryptedPassword'} = $user->{'Password'}
+          unless ( $user->{'Password'} =~ '^\*' );
+        delete $user->{'Password'};
+        print ".";
+        $user_obj = load_user($user->{'EmailAddress'});
+        unless ($user_obj->Id) {
+        my ($uid, $umsg) = $user_obj->Create( %{$user} );
+        }
+        my $id = $user_obj->Id();
+        die "Failed to create user for" . scalar Dumper $user unless ($id);
+        $user_map->{$old_id} = $id;
+}
+# }}}
+
