@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # RT is (c) 1996-2004 Jesse Vincent <jesse@fsck.com>
 
-# Version 1.21
+# Version 1.23
 
 use strict;
 
