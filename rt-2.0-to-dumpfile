@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # RT is (c) 1996-2003 Jesse Vincent <jesse@fsck.com>
 
-# Version 1.16
+# Version 1.18
 
 use strict;
 
@@ -10,6 +10,9 @@ my $export_dir_base = shift;
 
 my $mode  = ( shift || 'all' );
 my $since = ( shift || undef );
+
+# Set to 0 to not bother exporting dead/deleted tickets.
+my $export_dead = 1;
 
 my $export_dir_counter = 0;
 $export_dir_base .= "/";
@@ -192,8 +195,16 @@ sub export_tickets {
                      OPERATOR => ">=",
                      VALUE    => $since );
     }
+    ## XXX we could Limit on 'Status' '!=' 'dead' if $export_dead == 0,
+    ## but then we'd not be able to say /why/ we're not exporting the
+    ## ticket...
+
     while ( my $t = $tix->Next ) {
         my $tick_ds;
+        if (!$export_dead && ($t->Status eq 'dead')) {
+            print STDERR "\nNot exporting dead ticket " . $t->Id ;
+            next;
+        }
         print STDERR "\nExporting ticket " . $t->Id ;
         $export_dir_counter++;
         if ( $export_dir_counter % $export_dir_limit == 0) {
