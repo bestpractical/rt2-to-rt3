@@ -1,5 +1,5 @@
 PRODUCT			        = rt2-to-rt3
-TAG			            = 1.21
+TAG			            = 1.22
 CANONICAL_REPO		    = svn+ssh://svn.bestpractical.com/svn/bps-public/rt2-to-rt3/
 TAGS		            = tags/
 TRUNK	                = trunk/

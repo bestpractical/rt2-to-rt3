@@ -31,7 +31,7 @@ my $import_groups          = 1;
 my $import_queues          = 1;
 my $import_tickets         = 1;
 my $import_links           = 1;
-use lib ("/opt/bestpractical.com-rt3/lib");
+use lib ("/opt/rt3/lib");
 
 use Getopt::Long;
 
@@ -334,11 +334,17 @@ if ($import_links) {
         $link->{'Base'}   =~ s#/(.*?)/ticket/#/ticket/#;
         $link->{'Target'} =~ s#/(.*?)/ticket/#/ticket/#;
 
-        my ( $val, $msg ) = $l->Create(
+        my ( $val, $msg );
+        
+         eval { ($val, $msg ) = $l->Create(
             Type   => $link->{'Type'},
             Target => ( $link->{'LocalTarget'} || $link->{'Target'} ),
             Base   => ( $link->{'LocalBase'} || $link->{'Base'} )
         );
+        }; 
+        if ($@) {
+               warn $@; 
+        }
         unless ( $l->Id ) {
             if ( $link->{'LocalBase'} != $link->{'LocalTarget'} ) {
                 push ( @errors,
