@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # (c) 1996-2003 Jesse Vincent <jesse@bestpractical.com>
 
-# VERSION 1.16
+# VERSION 1.17
 
 package RT;
 use strict;
@@ -595,7 +595,46 @@ sub import_tickets {
                 warn "Couldn't create trans  " . $t->{'id'} . " " . Dumper($t);
             }
 
-            foreach my $a ( @{$attach} ) { 
+            foreach my $a ( @{$attach} ) {
+
+                if ( $a->{'Headers'} =~ /^Content-Type: (.*?)$/m ) {
+                    my $content_type = $1;
+                    if ( $content_type =~ qr{(text/plain|message/rfc822)}i ) {
+                        my $enc;
+                        if ( $content_type =~
+                            /charset=['"]?(.*?)(\s|\'|\"|;|$)/ )
+                        {
+                            $enc = $1;
+                        }
+                        else {
+                            $enc = $ENCODING;    #DEFAULT;
+                        }
+                        $enc =~ s/"'//gi;
+                        $enc = lc($enc);
+                        unless ( $enc eq 'utf-8' || $enc eq 'utf8' ) {
+                            use Encode;
+                            eval {
+                                Encode::from_to( $a->{'Content'},
+                                    $enc => 'utf8' );
+                                $a->{'Headers'} .=
+                                  "X-RT-Original-Encoding: $enc\n";
+                            };
+                            if ($@) {
+                                warn $@;
+                                eval {
+                                    $enc = $ENCODING;
+                                    Encode::from_to( $a->{'Content'},
+                                        $enc => 'utf8' );
+                                    $a->{'Headers'} .=
+                                      "X-RT-Original-Encoding: $enc\n";
+                                };
+                            }
+                            if ($@) { warn $@ }
+
+                        }
+                    }
+                }
+
                 my $att = RT::Attachment->new($RT::SystemUser);
                 $att->Import( %{$a} );
 			

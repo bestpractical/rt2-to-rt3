@@ -1,5 +1,25 @@
 Migrating from RT 2.0 to RT 3.0 
 
+This tool migrates your RT2 instance to an RT 3.0 instance. It transfers:
+
+	Users
+	Groups
+	Queues
+	Rights
+	Tickets
+	Custom Fields (Formerly Keywords)
+	ACLs
+	BASIC Scrips
+
+It does NOT automatically migrate:
+
+	Custom templates, 
+	Custom Scrips, 
+	Custom ScripActions, 
+	Custom ScripConditions
+
+
+
 Create a directory to hold your RT2 database dump. here we'll refer to it as
 DIRNAME. Anywhere you see the string  "DIRNAME", replace it with the path to
 your directory.
