@@ -251,7 +251,7 @@ sub export_tickets {
                 foreach
                   my $att_param ( sort keys %{ $att->{_AccessibleCache} } ) {
                     $att_ds->{$att_param} = $att->_Value($att_param)
-                      if ( $att->_Value($att_param) );
+                      if (defined $att->_Value($att_param) );
                 }
                 push ( @{ $trans_ds->{'Attachment'} }, $att_ds );
             }
