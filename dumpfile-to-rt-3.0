@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # (c) 1996-2003 Jesse Vincent <jesse@bestpractical.com>
 
-# VERSION 1.12
+# VERSION 1.15
 
 package RT;
 use strict;
@@ -56,6 +56,7 @@ my $DIR = shift @ARGV || die "$0 requires that you specify a directory containin
 require $DIR."/metadata";
 my $VAR1 = Data();
 
+my $attachment_map;
 my $user_map;
 my $group_map;
 my $queue_map;
@@ -226,6 +227,8 @@ foreach my $queue ( @{$queues} ) {
         delete $queue->{$attr};
     }
     encode_hashref($queue);
+        $queue->{'Creator'}       = $user_map->{ $queue->{'Creator'} };
+        $queue->{'LastUpdatedBy'} = $user_map->{ $queue->{'LastUpdatedBy'} };
     my $queue_obj = RT::Queue->new($RT::SystemUser);
     $queue_obj->Create( %{$queue} );
     my $id = $queue_obj->Id();
@@ -388,7 +391,8 @@ sub import_scrip {
 
                 unless ( $ownerscrip->Id ) {
                         use Data::Dumper;
-                        push @errors, "Could not create scrip: " .$params{'ScripCondition'}." ".$params{'ScripAction'}." with template ".$params{'Template'} . " in queue". $params{'Queue'}. " -- ". Dumper(\%params);
+                        push @errors, "\nCould not create scrip: " .$params{'ScripCondition'}." ".$params{'ScripAction'}." with template ".$params{'Template'} . " in queue". $params{'Queue'}. " -- ". Dumper(\%params). 
+	"\n - may be due to a non-standard template, condition or action";
                 }
                 $params{'ScripAction'} = 'Notify Requestors, Ccs and AdminCcs'.$1;
                  
@@ -398,7 +402,8 @@ sub import_scrip {
     $so->Create(%params);
 
     unless ( $so->Id ) {
-                        push @errors, "Could not create scrip: " .$params{'ScripCondition'}." ".$params{'ScripAction'}." with template".$params{'Template'} . " in queue". $params{'Queue'};
+                        push @errors, "\nCould not create scrip: " .$params{'ScripCondition'}." ".$params{'ScripAction'}." with template ".$params{'Template'} . " in queue #". $params{'Queue'}.
+	"\n - may be due to a non-standard template, condition or action";
     }
 
 
@@ -489,7 +494,7 @@ sub import_tickets {
 
         foreach my $watcher ( @{ $temp{'Watchers'} } ) {
             my $val;
-            $val = $watcher->{'Email'};
+            $val = ($watcher->{'Email'}||$user_map->{ $watcher->{'Owner'}});
             push ( @{ $ticket->{ $watcher->{'Type'} } }, $val );
 
         }
@@ -590,16 +595,18 @@ sub import_tickets {
                 warn "Couldn't create trans  " . $t->{'id'} . " " . Dumper($t);
             }
 
-            foreach my $a ( @{$attach} ) {
-                if ( $a->{ContentType} =~ '^text/' ) {
-                    encode_hashref($a);
-                }
+            foreach my $a ( @{$attach} ) { 
+		my $parent = $attachment_map->{$a->{'Parent'}} unless ($a->{'Parent'} == 0);
+		die 'Unable to determine proper parent for transaction. Please contact rt-devel@lists.fsck.com for support' unless ($a->{'Parent'} == 0 || !$parent);
+		$a->{'Parent'} = $parent;
                 my $att = RT::Attachment->new($RT::SystemUser);
                 $att->Import( %{$a} );
+			
                 unless ( $att->Id ) {
                     warn "Couldn't create attachment $a " . Dumper($a);
 
                 }
+		$attachment_map->{$a->{'id'} } = $att->Id;
             }
         }
 

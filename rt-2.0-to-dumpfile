@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # RT is (c) 1996-2003 Jesse Vincent <jesse@fsck.com>
 
-# Version 1.12
+# Version 1.15
 
 use strict;
 
@@ -13,6 +13,7 @@ my $since = ( shift || undef );
 
 my $export_dir_counter = 0;
 $export_dir_base .= "/";
+&checkDirExists($export_dir_base);
 
 # make this ridiculously large if you don't want a limit
 my $export_dir_limit = 1000;
@@ -23,8 +24,8 @@ use Carp;
 use Getopt::Long qw(:config pass_through);
 use Data::Dumper;
 
-use lib "/opt/fsck.com-rt2/lib";
-use lib "/opt/fsck.com-rt2/etc";
+use lib "/opt/rt2/lib";
+use lib "/opt/rt3/etc";
 
 use RT::Record;
 @RT::Record::ISA = qw(DBIx::SearchBuilder::Record);
@@ -212,7 +213,8 @@ sub export_tickets {
         my $watchers_ds;
         foreach my $w ( @{ $watchers->ItemsArrayRef } ) {
             my $ds = { Type  => $w->Type,
-                       Email => $w->Email,
+                       Email => ($w->Email||$w->OwnerObj->EmailAddress),
+		       Owner => $w->Owner,
                        Id    => $w->Id };
 
             push ( @{$watchers_ds}, $ds );
