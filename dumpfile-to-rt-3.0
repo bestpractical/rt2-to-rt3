@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # (c) 1996-2003 Jesse Vincent <jesse@bestpractical.com>
 
-# VERSION 1.6
+# VERSION 1.7
 
 package RT;
 use strict;
@@ -364,16 +364,20 @@ sub import_scrip {
                    ScripAction    => $scrip->{'Action'},
                    ScripCondition => $scrip->{'Condition'},
                      Queue          => $queue,
-                   Description    => "Imported from RT 2.0" );
+                   Description    => "Imported from RT 2.0"
+                 );
 
       #Notify All watchers is now two seperate scrips
      if ($params{'ScripAction'} =~ /^Notify All Watchers(.*)$/) {
                 $params{'ScripAction'} = 'Notify Owner'.$1;
                 my $ownerscrip = RT::Scrip->new($RT::SystemUser);
+
+
                 $ownerscrip->Create(%params);
 
-                unless ( $so->Id ) {
-                        push @errors, "Could not create scrip: " .$params{'ScripCondition'}." ".$params{'ScripAction'}." with template ".$params{'Template'} . " in queue". $params{'Queue'};
+                unless ( $ownerscrip->Id ) {
+                        use Data::Dumper;
+                        push @errors, "Could not create scrip: " .$params{'ScripCondition'}." ".$params{'ScripAction'}." with template ".$params{'Template'} . " in queue". $params{'Queue'}. " -- ". Dumper(\%params);
                 }
                 $params{'ScripAction'} = 'Notify Requestors, Ccs and AdminCcs'.$1;
                  
@@ -544,9 +548,7 @@ sub import_tickets {
                                Comments => 'Autocreated when added as a watcher'
                     );
                     unless ($Val) {
-                        $RT::Logger->error( "Failed to create user "
-                                            . $t->{'OldValue'} . ": "
-                                            . $Message );
+                        $RT::Logger->error( "Failed to create user '" . $t->{'OldValue'} . "': " . $Message );
 
                     }
                     $u = load_user( $new_user->Id );
