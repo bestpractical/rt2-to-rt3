@@ -40,6 +40,8 @@ use RT::Tickets;
 use RT::Template;
 use RT::CustomFields;
 use RT::Principals;
+use RT::Scrips;
+
 
 #*RT::Principal::HasRight = sub { 1 };;
 #Clean out all the nasties from the environment
