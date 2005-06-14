@@ -525,7 +525,7 @@ sub import_tickets {
                               . "'" );
                     }
                     $RT::Handle->SimpleQuery(
-                        "DELETE FROM CustomFieldValues WHERE Ticket = '$id'");
+                        "DELETE FROM TicketCustomFieldValues WHERE Ticket = '$id'");
                     $RT::Handle->SimpleQuery(
                         "DELETE FROM Tickets WHERE id = '$id'");
                 }
@@ -537,8 +537,7 @@ sub import_tickets {
             $ticket->{'Owner'} = $user_map->{ $ticket->{'Owner'} };
 
             $ticket->{'Creator'}       = $user_map->{ $ticket->{'Creator'} };
-            $ticket->{'LastUpdatedBy'} =
-              $user_map->{ $ticket->{'LastUpdatedBy'} };
+            $ticket->{'LastUpdatedBy'} = $user_map->{ $ticket->{'LastUpdatedBy'} };
 
             $ticket->{'_RecordTransaction'} = 0;
             foreach my $attr qw(Watchers Transaction CustomFields) {
