@@ -42,6 +42,12 @@ use RT::CustomFields;
 use RT::Principals;
 use RT::Scrips;
 
+package RT::Transaction;
+
+sub Create {
+return 1;
+}
+package main;
 
 #*RT::Principal::HasRight = sub { 1 };;
 #Clean out all the nasties from the environment
@@ -335,20 +341,21 @@ if ($import_links) {
         $link->{'Target'} =~ s#/(.*?)/ticket/#/ticket/#;
 
         my ( $val, $msg );
-        
-         eval { ($val, $msg ) = $l->Create(
-            Type   => $link->{'Type'},
-            Target => ( $link->{'LocalTarget'} || $link->{'Target'} ),
-            Base   => ( $link->{'LocalBase'} || $link->{'Base'} )
-        );
-        }; 
+
+        eval {
+            ( $val, $msg ) = $l->Create(
+                Type   => $link->{'Type'},
+                Target => ( $link->{'LocalTarget'} || $link->{'Target'} ),
+                Base   => ( $link->{'LocalBase'} || $link->{'Base'} )
+            );
+        };
         if ($@) {
-               print $@; 
+            print $@;
         }
         unless ( $l->Id ) {
             if ( $link->{'LocalBase'} != $link->{'LocalTarget'} ) {
-                push ( @errors,
-                    "Couldn't create link  from "
+                push( @errors,
+                        "Couldn't create link  from "
                       . $link->{'Base'} . " to "
                       . $link->{'Target'} );
             }
@@ -356,7 +363,7 @@ if ($import_links) {
     }
 }
 
-print join ( "\n", @errors );
+print join( "\n", @errors );
 
 sub encode_hashref {
     my $argsref = shift;
@@ -371,10 +378,10 @@ sub encode_hashref {
             foreach my $var (@temp) {
                 if ( ref($var) ) {
 
-                    push ( @{ $argsref->{$key} }, $var );
+                    push( @{ $argsref->{$key} }, $var );
                 }
                 else {
-                    push ( @{ $argsref->{$key} }, decode( $ENCODING, $var ) );
+                    push( @{ $argsref->{$key} }, decode( $ENCODING, $var ) );
                 }
             }
         }
@@ -458,7 +465,7 @@ sub load_user {
         if ( $user_id =~ /^\d+$/ ) {
             $user_objects{$user_id}->LoadByCols( id => $user_id );
         }
-       elsif ( $user_id =~ /@/ ) {
+        elsif ( $user_id =~ /@/ ) {
             $user_objects{$user_id}->LoadByCols( EmailAddress => $user_id );
             unless ( $user_objects{$user_id}->id ) {
                 $user_objects{$user_id}->LoadByCols( Name => $user_id );
@@ -492,12 +499,15 @@ sub import_tickets {
             next unless ( $file =~ /^t-(\d+)$/ );
             print $file . "\n";
             my $ticket;
-	    eval {
-                $ticket = Storable::retrieve("$DIR/$subdir/$file") || die "Couldn't load $DIR/$subdir/$file as a stored ticket. Trying as a dumped file\n";
-		};
-              if ($@) {
-	      	print STDERR $@;
-                require "$DIR/$subdir/$file" || die "Couldn't read ticket file $file";
+            eval {
+                $ticket = Storable::retrieve("$DIR/$subdir/$file")
+                  || die
+"Couldn't load $DIR/$subdir/$file as a stored ticket. Trying as a dumped file\n";
+            };
+            if ($@) {
+                print STDERR $@;
+                require "$DIR/$subdir/$file"
+                  || die "Couldn't read ticket file $file";
                 $ticket = Data();
             }
 
@@ -510,7 +520,9 @@ sub import_tickets {
                 if ( $t->Id ) {
 
                     # Blow away ticket watchers
-                    $RT::Handle->SimpleQuery( "DELETE FROM Groups WHERE Domain = 'RT::Ticket-Role' AND INSTANCE = '$id'");
+                    $RT::Handle->SimpleQuery(
+"DELETE FROM Groups WHERE Domain = 'RT::Ticket-Role' AND INSTANCE = '$id'"
+                    );
 
                     # Blow away ticket attachments
                     my $txns = $t->Transactions;
@@ -520,7 +532,7 @@ sub import_tickets {
                             $attach->Delete();
                         }
                         $RT::Handle->SimpleQuery(
-                            "DELETE FROM Transactions WHERE id='"
+                                "DELETE FROM Transactions WHERE id='"
                               . $txn->id
                               . "'" );
                     }
@@ -532,7 +544,8 @@ sub import_tickets {
             }    # end of incremental
             my $tick_object = RT::Ticket->new($RT::SystemUser);
 
-            $ticket->{'Status'} = 'deleted' if ( $ticket->{'Status'} eq 'dead' );
+            $ticket->{'Status'} = 'deleted'
+              if ( $ticket->{'Status'} eq 'dead' );
 
             $ticket->{'Owner'} = $user_map->{ $ticket->{'Owner'} };
 
@@ -551,22 +564,22 @@ sub import_tickets {
                 my $val;
                 $val =
                   ( $watcher->{'Email'} || $user_map->{ $watcher->{'Owner'} } );
-                push ( @{ $ticket->{ $watcher->{'Type'} } }, $val );
+                push( @{ $ticket->{ $watcher->{'Type'} } }, $val );
 
             }
 
             foreach my $cf ( keys %{ $temp{'CustomFields'} } ) {
                 my $cfid = $cf_map->{$cf};
-                $ticket->{ 'CustomField-' . $cfid } = $temp{'CustomFields'}->{$cf};
+                $ticket->{ 'CustomField-' . $cfid } =
+                  $temp{'CustomFields'}->{$cf};
 
             }
 
-            my ($tid, $ttrans, $msg)  = $tick_object->Create( %{$ticket} );
-            unless ($tid = $ticket->{'id'}) {
+            my ( $tid, $ttrans, $msg ) = $tick_object->Create( %{$ticket} );
+            unless ( $tid = $ticket->{'id'} ) {
                 print "Couldn't create TICKET: $msg";
                 die;
             }
-
 
             unless ( $tick_object->Id == $ticket->{id} ) {
                 print "Couldn't create ticket $ticket " . Dumper($ticket);
@@ -574,7 +587,6 @@ sub import_tickets {
 
             #import ticket transactions
             foreach my $t ( @{ $temp{Transaction} } ) {
-
 
                 $t->{'ActivateScrips'} = 0;
                 if ( $t->{'Type'} eq 'Status' ) {
@@ -597,7 +609,7 @@ sub import_tickets {
                         my ( $Val, $Message ) = $new_user->Create(
                             Name         => $t->{'NewValue'},
                             EmailAddress => (
-                                $t->{'NewValue'} !~ /\s/
+                                  $t->{'NewValue'} !~ /\s/
                                 ? $t->{'NewValue'}
                                 : undef
                             ),
@@ -606,7 +618,9 @@ sub import_tickets {
                             Comments   => 'Autocreated when added as a watcher'
                         );
                         unless ($Val) {
-                            print "Failed to create user '" . $t->{'NewValue'} . "': " . $Message."\n";
+                            print "Failed to create user '"
+                              . $t->{'NewValue'} . "': "
+                              . $Message . "\n";
                         }
                         $u = load_user( $new_user->Id );
                     }
@@ -622,7 +636,7 @@ sub import_tickets {
                         my ( $Val, $Message ) = $new_user->Create(
                             Name         => $t->{'OldValue'},
                             EmailAddress => (
-                                $t->{'OldValue'} !~ /\s/
+                                  $t->{'OldValue'} !~ /\s/
                                 ? $t->{'NewValue'}
                                 : undef
                             ),
@@ -631,7 +645,9 @@ sub import_tickets {
                             Comments   => 'Autocreated when added as a watcher'
                         );
                         unless ($Val) {
-                            print STDERR  "Failed to create user '" . $t->{'OldValue'} . "': " . $Message ."\n";
+                            print STDERR "Failed to create user '"
+                              . $t->{'OldValue'} . "': "
+                              . $Message . "\n";
 
                         }
                         $u = load_user( $new_user->Id );
@@ -660,7 +676,9 @@ sub import_tickets {
                 encode_hashref($t);
                 $trans_obj->Create( %{$t} );
                 unless ( $trans_obj->Id == $t->{'id'} ) {
-                    print "Couldn't create trans  " . $t->{'id'} . "\n" . Dumper($t);
+                    print "Couldn't create trans  "
+                      . $t->{'id'} . "\n"
+                      . Dumper($t);
                     exit;
 
                 }
@@ -685,15 +703,19 @@ sub import_tickets {
                             unless ( $enc eq 'utf-8' || $enc eq 'utf8' ) {
                                 use Encode;
                                 eval {
-                                    Encode::from_to( $a->{'Content'}, $enc => 'utf8' );
-                                    $a->{'Headers'} .= "X-RT-Original-Encoding: $enc\n";
+                                    Encode::from_to( $a->{'Content'},
+                                        $enc => 'utf8' );
+                                    $a->{'Headers'} .=
+                                      "X-RT-Original-Encoding: $enc\n";
                                 };
                                 if ($@) {
                                     print $@;
                                     eval {
                                         $enc = $ENCODING;
-                                        Encode::from_to( $a->{'Content'}, $enc => 'utf8' );
-                                        $a->{'Headers'} .= "X-RT-Original-Encoding: $enc\n";
+                                        Encode::from_to( $a->{'Content'},
+                                            $enc => 'utf8' );
+                                        $a->{'Headers'} .=
+                                          "X-RT-Original-Encoding: $enc\n";
                                     };
                                 }
                                 if ($@) { print $@ }
@@ -703,13 +725,13 @@ sub import_tickets {
                     }
 
                     my $att = RT::Attachment->new($RT::SystemUser);
-                    my ($attid, $attmsg) . $att->Import( %{$a} );
+                    my ( $attid, $attmsg ) . $att->Import( %{$a} );
 
                     unless ( $att->Id ) {
-                        print"Couldn't create attachment " . $attmsg."\n";
+                        print "Couldn't create attachment " . $attmsg . "\n";
                         delete $a->{'Content'};
                         print Dumper ($a);
-                        print "\n". $RT::Handle->dbh->errstr."\n";
+                        print "\n" . $RT::Handle->dbh->errstr . "\n";
                         die;
 
                     }
@@ -727,7 +749,7 @@ sub import_user {
 
     $user->{'Name'} = "Unnamed user " . $user->{'id'}
       unless ( $user->{'Name'} );
-    print "Creating user " . $user->{'Name'}."\n";
+    print "Creating user " . $user->{'Name'} . "\n";
 
     if ( $user->{'Name'} eq 'Nobody' ) {
         $user_map->{ $user->{'id'} } = $RT::Nobody->Id;
