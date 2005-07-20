@@ -45,9 +45,10 @@ use RT::Scrips;
 package RT::Transaction;
 
 sub Create {
-return 1;
+    return 1;
 }
-package main;
+
+package RT;
 
 #*RT::Principal::HasRight = sub { 1 };;
 #Clean out all the nasties from the environment
