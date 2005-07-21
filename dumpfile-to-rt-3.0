@@ -10,6 +10,7 @@ no warnings qw/redefine/;
 $| = 1;
 
 use Data::Dumper;
+use MIME::Base64;
 BEGIN { $RT::DontCacheSearchBuilderRecords = 1; }
 use vars qw($dbh $debug %user_objects);
 $debug = 0;
@@ -42,14 +43,6 @@ use RT::CustomFields;
 use RT::Principals;
 use RT::Scrips;
 
-package RT::Transaction;
-
-sub Create {
-    return 1;
-}
-
-package RT;
-
 #*RT::Principal::HasRight = sub { 1 };;
 #Clean out all the nasties from the environment
 CleanEnv();
@@ -71,6 +64,7 @@ my $user_map;
 my $group_map;
 my $queue_map;
 my $cf_map;
+my $transaction_map;
 my @errors;
 
 if ( ExportType() eq 'incremental' ) {
@@ -101,10 +95,12 @@ if ( ExportType() eq 'incremental' ) {
 
 }
 else {
-
+    print "Importing scrips\n";
     foreach my $scrip ( @{ $VAR1->{'Global'}->{'Scrip'} } ) {
+	print "s";
         import_scrip( $scrip, 0 );
     }
+    print "\n";
 
     if ($import_users) {
         print "Importing users\n";
@@ -112,11 +108,9 @@ else {
         $RT::Handle->SimpleQuery("DELETE FROM Users where Name='root'");
 
         foreach my $user ( @{$users} ) {
-            print "u";
             encode_hashref($user);
             import_user($user);
         }
-        print "\n";
     }
 
     # find all groups
@@ -139,27 +133,28 @@ else {
 
             $g->CreateUserDefinedGroup( %{$group} );
             my $id = $g->Id();
-            print "Failed to create group for" . Dumper $groups->{$group}
-              unless ($id);
+            print "\nFailed to create group for" . Dumper $groups->{$group} unless ($id);
             $group_map->{$old_id} = $id;
 
             #         import members
 
             foreach my $member ( @{$members} ) {
                 unless ( $user_map->{$member} ) {
-                    print "Couldn't find user with RT2 userid " . $member
+                    print "\nCouldn't find user with RT2 userid " . $member
                       . " - not adding to "
-                      . $g->Name;
+                      . $g->Name . "\n";
                 }
                 else {
                     $g->AddMember( $user_map->{$member} );
                 }
             }
         }
+	print "\n";
     }
 
     if ($import_global_metadata) {
 
+	print "Importing rights\n";
         foreach my $right ( @{ $VAR1->{'Global'}->{'Right'} } ) {
             print "r";
             my $princ = RT::Principal->new($RT::SystemUser);
@@ -174,7 +169,7 @@ else {
                 }
                 $princ->Load($id);
                 $princ->Id
-                  || print "Couldn't load principal $id to grant them "
+                  || print "\nCouldn't load principal $id to grant them "
                   . $right->{'Name'}
                   . " globally\n"
                   . Dumper($right);
@@ -188,7 +183,7 @@ else {
                 $id    = $g->Id;
                 $princ = $g->PrincipalObj;
                 $g->Id
-                  || print "Couldn't load principal "
+                  || print "\nCouldn't load principal "
                   . $g->Id
                   . " to grant them "
                   . $right->{'Name'}
@@ -200,7 +195,9 @@ else {
                 Right  => $right->{'Name'}
             );
         }
+	print "\n";
 
+	print "Importing custom fields\n";
         foreach my $cf ( values %{ $VAR1->{'Global'}->{'CustomField'} } ) {
             print "f";
             my $type;
@@ -218,7 +215,8 @@ else {
                 Disabled => ( $cf->{'Disabled'} || 0 )
             );
             unless ( $cfobj->Id ) {
-                print "Couldn't create custom field " . $cf->{'Name'};
+                print "\nCouldn't create custom field " . $cf->{'Name'}
+		    . "\n";
             }
             $cf_map->{ $cf->{'id'} } = $cfobj->Id;
 
@@ -226,6 +224,7 @@ else {
                 $cfobj->AddValue( Name => $val );
             }
         }
+	print "\n";
     }
 
     # find all queues in RT 2.0
@@ -233,6 +232,7 @@ else {
     #
     # for each queue
     if ($import_queues) {
+	print "Importing queues\n";
         $RT::Handle->SimpleQuery("DELETE FROM Queues where id = 1");
 
         my $queues = $VAR1->{'Queue'};
@@ -251,7 +251,7 @@ else {
             my $queue_obj = RT::Queue->new($RT::SystemUser);
             $queue_obj->Create( %{$queue} );
             my $id = $queue_obj->Id();
-            print "Failed to create queue for" . Dumper $queue unless ($id);
+            print "\nFailed to create queue for" . Dumper $queue unless ($id);
             $queue_map->{ $temp{'id'} } = $id;
 
             foreach my $watcher ( @{ $temp{Watchers} } ) {
@@ -287,7 +287,7 @@ else {
                 }
                 $princ->Load($id);
                 $princ->Id
-                  || print "Couldn't load principal $id to grant them "
+                  || print "\nCouldn't load principal $id to grant them "
                   . $right->{'Name'}
                   . " on queue "
                   . $queue_obj->Name . "\n"
@@ -313,7 +313,7 @@ else {
                     Queue    => $queue_obj->Id
                 );
                 unless ( $cfobj->Id ) {
-                    print "Couldn't create custom field " . $cf->{'Name'};
+                    print "\nCouldn't create custom field " . $cf->{'Name'};
                 }
                 $cf_map->{ $cf->{'id'} } = $cfobj->Id;
                 foreach my $val ( @{ $cf->{'Value'} } ) {
@@ -325,14 +325,12 @@ else {
             }
 
         }
+	print "\n";
     }
-
-    import_tickets() if ($import_tickets)
-
+    import_tickets() if ($import_tickets);
 }
 
 if ($import_links) {
-
     print "Importing links\n";
     foreach my $link ( @{ $VAR1->{'Link'} } ) {
         print "l";
@@ -362,6 +360,7 @@ if ($import_links) {
             }
         }
     }
+    print "\n";
 }
 
 print join( "\n", @errors );
@@ -490,15 +489,14 @@ sub load_user {
 # {{{ import tickets
 sub import_tickets {
     eval "sub Data {die 'Ticket files could not be loaded'}";
-    print "Importing tickets";
+    print "Importing tickets\n";
     opendir( TOPDIR, $DIR ) || die "Couldn't open $DIR";
     while ( my $subdir = readdir(TOPDIR) ) {
         next unless ( $subdir =~ /^tickets-/i );
         opendir( DIR, $DIR . "/" . $subdir ) || die "Couldn't open $subdir";
         while ( my $file = readdir(DIR) ) {
-            print ".";
             next unless ( $file =~ /^t-(\d+)$/ );
-            print $file . "\n";
+            print "$file: ";
             my $ticket;
             eval {
                 $ticket = Storable::retrieve("$DIR/$subdir/$file")
@@ -511,6 +509,8 @@ sub import_tickets {
                   || die "Couldn't read ticket file $file";
                 $ticket = Data();
             }
+
+#	    next if ($ticket->{'Status'} eq 'dead');
 
             my %temp;
 
@@ -543,6 +543,7 @@ sub import_tickets {
                         "DELETE FROM Tickets WHERE id = '$id'");
                 }
             }    # end of incremental
+
             my $tick_object = RT::Ticket->new($RT::SystemUser);
 
             $ticket->{'Status'} = 'deleted'
@@ -562,7 +563,9 @@ sub import_tickets {
             encode_hashref($ticket);
 
             foreach my $watcher ( @{ $temp{'Watchers'} } ) {
+		print "w";
                 my $val;
+		encode_hashref($watcher);
                 $val =
                   ( $watcher->{'Email'} || $user_map->{ $watcher->{'Owner'} } );
                 push( @{ $ticket->{ $watcher->{'Type'} } }, $val );
@@ -570,6 +573,7 @@ sub import_tickets {
             }
 
             foreach my $cf ( keys %{ $temp{'CustomFields'} } ) {
+		print "f";
                 my $cfid = $cf_map->{$cf};
                 $ticket->{ 'CustomField-' . $cfid } =
                   $temp{'CustomFields'}->{$cf};
@@ -578,17 +582,23 @@ sub import_tickets {
 
             my ( $tid, $ttrans, $msg ) = $tick_object->Create( %{$ticket} );
             unless ( $tid = $ticket->{'id'} ) {
-                print "Couldn't create TICKET: $msg";
+                print "\nCouldn't create TICKET: $msg";
                 die;
             }
 
             unless ( $tick_object->Id == $ticket->{id} ) {
-                print "Couldn't create ticket $ticket " . Dumper($ticket);
+                print "\nCouldn't create ticket $ticket " . Dumper($ticket);
             }
 
             #import ticket transactions
             foreach my $t ( @{ $temp{Transaction} } ) {
-
+                print "t";
+                encode_hashref($t);
+                # rt-3.4.x can have conflicting IDs
+                # due to non-ticket transactions.
+                my $old_id = $t->{'id'};
+                delete $t->{'id'};
+                
                 $t->{'ActivateScrips'} = 0;
                 if ( $t->{'Type'} eq 'Status' ) {
                     if ( $t->{'NewValue'} eq 'dead' ) {
@@ -619,7 +629,7 @@ sub import_tickets {
                             Comments   => 'Autocreated when added as a watcher'
                         );
                         unless ($Val) {
-                            print "Failed to create user '"
+                            print "\nFailed to create user '"
                               . $t->{'NewValue'} . "': "
                               . $Message . "\n";
                         }
@@ -646,7 +656,7 @@ sub import_tickets {
                             Comments   => 'Autocreated when added as a watcher'
                         );
                         unless ($Val) {
-                            print STDERR "Failed to create user '"
+                            print STDERR "\nFailed to create user '"
                               . $t->{'OldValue'} . "': "
                               . $Message . "\n";
 
@@ -669,26 +679,40 @@ sub import_tickets {
                       || $RT::Nobody->Id;
                 }
 
+ 		# Map Keywords into CustomFields.
+ 		if ( $t->{'Type'} eq 'Keyword' ) {
+ 		    $t->{'Type'} = 'CustomField';
+ 		    $t->{'Field'} = $cf_map->{ $t->{'Field'} };
+ 		}
+
                 my $trans_obj = RT::Transaction->new($RT::SystemUser);
                 $t->{'Creator'} = $user_map->{ $t->{'Creator'} };
                 my $attach = $t->{'Attachment'};
                 delete $t->{'Attachment'};
 
-                encode_hashref($t);
-                $trans_obj->Create( %{$t} );
-                unless ( $trans_obj->Id == $t->{'id'} ) {
+                # encode_hashref($t);
+                my ($Val, $Message) = $trans_obj->Create( %{$t} );
+                unless ( $Val ) {
                     print "Couldn't create trans  "
-                      . $t->{'id'} . "\n"
+                      . $old_id . "\n"
                       . Dumper($t);
                     exit;
-
                 }
+                my $id = $trans_obj->Id();
+                $transaction_map->{$old_id} = $id;
 
                 foreach my $a ( @{$attach} ) {
-
-                    if ( $a->{'Headers'} =~ /^Content-Type: (.*?)$/m ) {
+ 		    print "a";
+ 		    $a->{'TransactionId'} =
+ 			$transaction_map->{$a->{'TransactionId'}};
+ 		    foreach my $k (keys %$a) {
+ 			next if ($k eq 'Content');
+ 			$a->{$k} = decode($ENCODING, $a->{$k});
+ 		    }
+                    if ( $a->{'Headers'} =~ /^Content-Type: (.*?)$/m
+ 			 || $a->{'ContentType'} =~ /(.*)/ ) {
                         my $content_type = $1;
-                        if ( $content_type =~ qr{(text/plain|message/rfc822)}i )
+                        if ( $content_type =~ qr{(text/|message/rfc822)}i )
                         {
                             my $enc;
                             if ( $content_type =~
@@ -699,10 +723,11 @@ sub import_tickets {
                             else {
                                 $enc = $ENCODING;    #DEFAULT;
                             }
+			    $enc = $ENCODING unless $enc;
                             $enc =~ s/"'//gi;
-                            $enc = lc($enc);
+			    $enc = lc($enc);
+
                             unless ( $enc eq 'utf-8' || $enc eq 'utf8' ) {
-                                use Encode;
                                 eval {
                                     Encode::from_to( $a->{'Content'},
                                         $enc => 'utf8' );
@@ -722,23 +747,31 @@ sub import_tickets {
                                 if ($@) { print $@ }
 
                             }
-                        }
-                    }
+                        } elsif ($a->{'ContentEncoding'} eq 'base64') {
+                            # rt2 decodes base64-encoded attachments
+                            # upon export.
+                            $a->{'Content'}
+                                = MIME::Base64::encode_base64($a->{'Content'});
+                        } elsif ($a->{'Headers'} =~ /^Content-Transfer-Encoding: base64$/mi) {
+                            $a->{'Content'}
+                                = MIME::Base64::encode_base64($a->{'Content'});
+			    $a->{'ContentEncoding'} = 'base64';
+			}
+		    }
 
                     my $att = RT::Attachment->new($RT::SystemUser);
-                    my ( $attid, $attmsg ) . $att->Import( %{$a} );
+                    my ( $attid, $attmsg ) = $att->Import( %{$a} );
 
                     unless ( $att->Id ) {
-                        print "Couldn't create attachment " . $attmsg . "\n";
+                        print "\nCouldn't create attachment " . $attmsg . "\n";
                         delete $a->{'Content'};
                         print Dumper ($a);
                         print "\n" . $RT::Handle->dbh->errstr . "\n";
                         die;
-
                     }
                 }
             }
-
+	    print "\n";
         }
     }
 }
@@ -770,7 +803,6 @@ sub import_user {
     $user->{'CryptedPassword'} = $user->{'Password'}
       unless ( $user->{'Password'} =~ '^\*' );
     delete $user->{'Password'};
-    print ".";
     $user_obj = load_user( $user->{'EmailAddress'} || $user->{'Name'} );
 
     unless ( $user_obj->Id ) {
@@ -782,4 +814,3 @@ sub import_user {
 }
 
 # }}}
-
