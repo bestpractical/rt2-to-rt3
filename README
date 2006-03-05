@@ -1,5 +1,9 @@
 Migrating from RT 2.0 to RT 3.0 
 
+NOTICE: IF YOU WANT TO UPGRADE FROM RT 2.0 TO A RELEASE OF RT AFTER 3.0,
+YOU MUST FIRST UPGRADE TO RT 3.0
+
+
 This tool migrates your RT2 instance to an RT 3.0 instance. It transfers:
 
 	Users
