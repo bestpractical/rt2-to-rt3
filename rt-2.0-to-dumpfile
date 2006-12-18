@@ -4,6 +4,7 @@
 # Version 1.23
 
 use strict;
+use warnings;
 
 $| = 1;
 my $export_dir_base = shift;
@@ -34,6 +35,125 @@ use lib "/opt/rt-bps/etc";
 
 use RT::Record;
 @RT::Record::ISA = qw(DBIx::SearchBuilder::Record);
+
+my %FIELD_MAPPINGS = (
+    'RT::Ticket' => [
+                      'EffectiveId',
+                      'Queue',
+                      'Requestors',
+                      'Owner',
+                      'Subject',
+                      'InitialPriority',
+                      'FinalPriority',
+                      'Priority',
+                      'Status',
+                      'TimeWorked',
+                      'TimeLeft',
+                      'Created',
+                      'Creator',
+                      'Told',
+                      'Resolved',
+                      'Starts',
+                      'Started',
+                      'Due',
+                      'Creator',
+                      'Created',
+                      'LastUpdatedBy',
+                      'LastUpdated',
+                      'id'
+                    ],
+    'RT::Attachment' => [
+                          'TransactionId',
+                          'MessageId',
+                          'Parent',
+                          'ContentType',
+                          'Subject',
+                          'Content',
+                          'ContentEncoding',
+                          'Headers',
+                          'Filename',
+                          'Creator',
+                          'Created',
+                          'id'
+                        ], 
+    'RT::Group' => [
+                     'Pseudo',
+                     'Description',
+                     'Name',
+                     'id'
+                   ],
+    'RT::User' => [
+                    'WebEncoding',
+                    'Privileged',
+                    'AuthSystem',
+                    'Password',
+                    'MobilePhone',
+                    'Disabled',
+                    'WorkPhone',
+                    'LastUpdated',
+                    'PagerPhone',
+                    'ExternalContactInfoId',
+                    'ContactInfoSystem',
+                    'Creator',
+                    'LastUpdatedBy',
+                    'HomePhone',
+                    'Address1',
+                    'Created',
+                    'ExternalAuthId',
+                    'Comments',
+                    'NickName',
+                    'Address2',
+                    'FreeformContactInfo',
+                    'RealName',
+                    'City',
+                    'EmailAddress',
+                    'EmailEncoding',
+                    'State',
+                    'Signature',
+                    'Zip',
+                    'Organization',
+                    'PagerEmailAddress',
+                    'Lang',
+                    'Gecos',
+                    'Country',
+                    'Name',
+                    'id'
+                  ],
+    'RT::Transaction' => [
+                           'OldValue',
+                           'Ticket',
+                           'NewValue',
+                           'Creator',
+                           'TimeTaken',
+                           'Type',
+                           'Field',
+                           'Created',
+                           'Data',
+                           'id'
+                         ],
+    'RT::Link' => [
+                    'Target',
+                    'Base',
+                    'LocalTarget',
+                    'Creator',
+                    'Type',
+                    'LastUpdatedBy',
+                    'LocalBase',
+                    'Created',
+                    'LastUpdated',
+                  ],
+    'RT::KeywordSelect' => [
+                             'ObjectValue',
+                             'Disabled',
+                             'ObjectField',
+                             'Depth',
+                             'Single',
+                             'Keyword',
+                             'Name',
+                             'ObjectType',
+                             'id'
+                           ],
+);
 
 use RT::Interface::CLI qw(CleanEnv LoadConfig DBConnect GetCurrentUser GetMessageContent);
 use RT::Groups;
@@ -76,10 +196,6 @@ my $ds;
 
 if ( $mode =~ /^all$/i ) {
 
-    my $blank_Group = RT::Group->new($RT::SystemUser);
-    $blank_Group->_Accessible( 'Foo', 'read' );
-    my $acc = $blank_Group->{_AccessibleCache};
-
     my $Groups = RT::Groups->new($RT::SystemUser);
     $Groups->LimitToReal();
     $Groups->{'find_disabled_rows'} = 1;
@@ -87,14 +203,13 @@ if ( $mode =~ /^all$/i ) {
 
         my $group;
 
-        foreach my $param ( sort keys %$acc, 'id' ) {
+        foreach my $param ( sort @{$FIELD_MAPPINGS{'RT::Group'}} ) {
             $group->{$param} = $Group->_Value($param)
               if ( $Group->_Value($param) );
         }
         my $members = $Group->MembersObj();
         foreach my $member ( @{ $members->ItemsArrayRef } ) {
             push @{ $group->{Member} }, $member->UserObj->Id;
-
         }
         push @{ $ds->{'Group'} }, $group;
     }
@@ -103,15 +218,12 @@ if ( $mode =~ /^all$/i ) {
     $ds->{'User'} = \@users;
 
     export_queues($ds);
-    my $blank_KeywordSelect = RT::KeywordSelect->new($RT::SystemUser);
-    $blank_KeywordSelect->_Accessible( 'Foo', 'read' );
-    my $global_ksacc = $blank_KeywordSelect->{_AccessibleCache};
     my $global_ks    = RT::KeywordSelects->new($RT::SystemUser);
     $global_ks->LimitToQueue(0);
     $global_ks->{'find_disabled_rows'} = 1;
     foreach my $keysel ( @{ $global_ks->ItemsArrayRef } ) {
 
-        foreach my $param ( sort keys %$global_ksacc, 'id' ) {
+        foreach my $param ( sort @{$FIELD_MAPPINGS{'RT::KeywordSelect'}} ) {
             $ds->{Global}->{'CustomField'}->{ $keysel->id }->{$param} = $keysel->_Value($param)
               if ( $keysel->_Value($param) );
         }
@@ -148,14 +260,11 @@ if ( $mode =~ /^all$/i ) {
         push ( @{ $ds->{'Global'}->{'Right'} }, $right_ds );
     }
 
-    my $blank_Link = RT::Link->new($RT::SystemUser);
-    $blank_Link->_Accessible( 'Foo', 'read' );
-    $acc = $blank_Link->{_AccessibleCache};
     my $links = RT::Links->new($RT::SystemUser);
     $links->UnLimit();
     while ( my $l = $links->Next ) {
         my $link_ds;
-        foreach my $param ( sort keys %$acc ) {
+        foreach my $param ( sort @{$FIELD_MAPPINGS{'RT::Link'}} ) {
             $link_ds->{$param} = $l->_Value($param)
               if ( $l->_Value($param) );
         }
@@ -216,7 +325,7 @@ sub export_tickets {
 
         }
 
-        foreach my $param ( sort keys %{ $t->{_AccessibleCache} }, 'id' ) {
+        foreach my $param ( sort @{$FIELD_MAPPINGS{'RT::Ticket'}} ) {
             $tick_ds->{$param} = $t->_Value($param)
               if ( $t->_Value($param) );
         }
@@ -244,14 +353,11 @@ sub export_tickets {
             }
         }
 
-        my $blank_Transaction = RT::Transaction->new($RT::SystemUser);
-        $blank_Transaction->_Accessible( 'Foo', 'read' );
-        my $tracc = $blank_Transaction->{_AccessibleCache};
         my $tr    = $t->Transactions;
         while ( my $trans = $tr->Next ) {
             my $trans_ds;
             print STDERR ".";
-            foreach my $tr_param ( sort keys %$tracc, 'id' ) {
+            foreach my $tr_param ( @{$FIELD_MAPPINGS{'RT::Transaction'}} ) {
                 $trans_ds->{$tr_param} = $trans->_Value($tr_param)
                   if ( $trans->_Value($tr_param) );
             }
@@ -264,7 +370,7 @@ sub export_tickets {
                 my $att_ds;
                 print STDERR ".";
                 foreach
-                  my $att_param ( sort keys %{ $att->{_AccessibleCache} } ) {
+                  my $att_param ( @{$FIELD_MAPPINGS{'RT::Attachment'}} ) {
                         if ($att_param eq 'Content') {
                                 $att_ds->{$att_param} = $att->Content();
 
@@ -290,9 +396,6 @@ sub export_tickets {
 sub export_users {
     my $ds = shift;
     my $since = ( shift || 0 );
-    my $blank_User = RT::User->new($RT::SystemUser);
-    $blank_User->_Accessible( 'Foo', 'read' );
-    my $acc = $blank_User->{_AccessibleCache};
 
     my $users = RT::Users->new($RT::SystemUser);
     if ($since) {
@@ -306,7 +409,7 @@ sub export_users {
     my @users;
     foreach my $user ( @{ $users->ItemsArrayRef } ) {
         my $user_ds;
-        foreach my $param ( sort keys %$acc, 'id' ) {
+        foreach my $param ( sort @{$FIELD_MAPPINGS{'RT::User'}} ) {
             $user_ds->{$param} = $user->_Value($param)
               if ( $user->_Value($param) );
         }
@@ -318,17 +421,13 @@ sub export_users {
 sub export_queues {
     my $ds = shift;
 
-    my $blank_Queue = RT::Queue->new($RT::SystemUser);
-    $blank_Queue->_Accessible( 'Foo', 'read' );
-    my $acc = $blank_Queue->{_AccessibleCache};
-
     my $Queues = RT::Queues->new($RT::SystemUser);
     $Queues->UnLimit();
     $Queues->{'find_disabled_rows'} = 1;
 
     foreach my $Queue ( @{ $Queues->ItemsArrayRef } ) {
         my $queue_ds;
-        foreach my $param ( sort keys %$acc, 'id' ) {
+        foreach my $param ( sort @{$FIELD_MAPPINGS{'RT::Queue'}} ) {
             $queue_ds->{$param} = $Queue->_Value($param)
               if ( $Queue->_Value($param) );
         }
@@ -343,16 +442,12 @@ sub export_queues {
         }
         $queue_ds->{'Watchers'} = $watchers_ds;
 
-        my $blank_KeywordSelect = RT::KeywordSelect->new($RT::SystemUser);
-        $blank_KeywordSelect->_Accessible( 'Foo', 'read' );
-        my $ksacc = $blank_KeywordSelect->{_AccessibleCache};
-
         my $ks = $Queue->KeywordSelects();
         $ks->{'find_disabled_rows'} = 1;
         foreach my $keysel ( @{ $ks->ItemsArrayRef } ) {
             next if ($keysel->ObjectValue == 0);
             my $ks_ds;
-            foreach my $param ( sort keys %$ksacc, 'id' ) {
+            foreach my $param ( sort @{$FIELD_MAPPINGS{'RT::KeywordSelect'}} ) {
                 $ks_ds->{$param} = $keysel->_Value($param)
                   if ( $keysel->_Value($param) );
             }
