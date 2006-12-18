@@ -64,6 +64,7 @@ my $VAR1 = Data();
 # optional second command line argument
 # tells us where to find mappings
 sub client_import_queue {};
+sub client_import_user {};
 my $CLIENT_MAPPING = shift @ARGV;
 eval { require $CLIENT_MAPPING if $CLIENT_MAPPING };
 
@@ -144,7 +145,15 @@ else {
 
             encode_hashref($group);
 
-            $g->CreateUserDefinedGroup( %{$group} );
+            if ($merge_on_import) {
+                $g->LoadUserDefinedGroup($group->{Name});
+                unless ($g->Id) {
+                    $g->CreateUserDefinedGroup( %{$group} );
+                }
+            } else {
+                $g->CreateUserDefinedGroup( %{$group} );
+            }
+
             my $id = $g->Id();
             print "\nFailed to create group for" . Dumper $groups->{$group} unless ($id);
             $group_map->{$old_id} = $id;
@@ -930,6 +939,7 @@ sub import_user {
     my $id = $user_obj->Id();
     print "Failed to create user for" . scalar Dumper $user unless ($id);
     $user_map->{$old_id} = $id;
+    client_import_user($user_obj);
 }
 
 # }}}
