@@ -109,7 +109,9 @@ else {
     if ($import_users) {
         print "Importing users\n";
         my $users = $VAR1->{'User'};
-        $RT::Handle->SimpleQuery("DELETE FROM Users where Name='root'");
+        unless ($merge_on_import) {
+            $RT::Handle->SimpleQuery("DELETE FROM Users where Name='root'");
+        }
 
         foreach my $user ( @{$users} ) {
             encode_hashref($user);
@@ -253,8 +255,12 @@ else {
             $queue->{'LastUpdatedBy'} =
               $user_map->{ $queue->{'LastUpdatedBy'} };
             my $queue_obj = RT::Queue->new($RT::SystemUser);
-            $queue_obj->Create( %{$queue} );
+            $queue_obj->LoadByCols( Name => $queue->{Name} );
             my $id = $queue_obj->Id();
+            unless ($id) {
+                $queue_obj->Create( %{$queue} );
+                $id = $queue_obj->Id();
+            }
             print "\nFailed to create queue for" . Dumper $queue unless ($id);
             $queue_map->{ $temp{'id'} } = $id;
 
