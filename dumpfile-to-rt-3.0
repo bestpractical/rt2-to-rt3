@@ -682,6 +682,10 @@ sub import_tickets {
                 # due to non-ticket transactions.
                 my $old_id = $t->{'id'};
                 delete $t->{'id'};
+
+                if ($merge_on_import) {
+                    $t->{Ticket} = $tick_object->Id;
+                }
                 
                 $t->{'ActivateScrips'} = 0;
                 if ( $t->{'Type'} eq 'Status' ) {
@@ -778,13 +782,14 @@ sub import_tickets {
                 my ($Val, $Message) = $trans_obj->Create( %{$t} );
                 unless ( $Val ) {
                     print "Couldn't create trans  "
-                      . $old_id . "\n"
+                      . $old_id . $Message . "\n"
                       . Dumper($t);
                     exit;
                 }
                 my $id = $trans_obj->Id();
                 $transaction_map->{$old_id} = $id;
 
+                my $attachment_parent;
                 foreach my $a ( @{$attach} ) {
  		    print "a";
  		    $a->{'TransactionId'} =
@@ -844,6 +849,19 @@ sub import_tickets {
 		    }
 
                     my $att = RT::Attachment->new($RT::SystemUser);
+                    if ($merge_on_import) {
+                        delete $a->{id};
+                        # attachments point to other attachments internally,
+                        # but since we're renumbering attachments, Parent
+                        # needs to change too.  They should always be sequential
+                        # but be paranoid
+                        if ($a->{Parent} && !$attachment_parent) {
+                            die "Trying to remap $a->{Parent} but don't know where to remap it";
+                        }
+                        if ($a->{Parent} && $attachment_parent) {
+                            $a->{Parent} = $attachment_parent;
+                        }
+                    }
                     my ( $attid, $attmsg ) = $att->Import( %{$a} );
 
                     unless ( $att->Id ) {
@@ -852,6 +870,10 @@ sub import_tickets {
                         print Dumper ($a);
                         print "\n" . $RT::Handle->dbh->errstr . "\n";
                         die;
+                    }
+                    if ($merge_on_import && !$a->{Parent}) {
+                        # if Parent == 0, we might have children in following rows
+                        $attachment_parent = $att->Id;
                     }
                 }
             }
