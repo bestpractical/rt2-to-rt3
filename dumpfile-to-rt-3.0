@@ -6,6 +6,7 @@
 package RT;
 use strict;
 use Storable;
+use warnings;
 no warnings qw/redefine/;
 $| = 1;
 
@@ -59,6 +60,12 @@ my $DIR = shift @ARGV
 
 require $DIR . "/metadata";
 my $VAR1 = Data();
+
+# optional second command line argument
+# tells us where to find mappings
+sub client_import_queue {};
+my $CLIENT_MAPPING = shift @ARGV;
+eval { require $CLIENT_MAPPING if $CLIENT_MAPPING };
 
 my $attachment_map;
 my $user_map;
@@ -245,6 +252,10 @@ else {
 
         foreach my $queue ( @{$queues} ) {
             print "q";
+            if (my $client_queue = client_import_queue($queue)) {
+                $queue = $client_queue;
+            }
+
             my %temp;
             foreach my $attr qw(id CustomField Watchers Scrip Right) {
                 $temp{$attr} = $queue->{$attr};
