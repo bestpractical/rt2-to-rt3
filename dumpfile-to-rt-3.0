@@ -889,7 +889,7 @@ sub import_user {
 
     $user->{'Name'} = "Unnamed user " . $user->{'id'}
       unless ( $user->{'Name'} );
-    print "Creating user " . $user->{'Name'} . "\n";
+    print "Loading user " . $user->{'Name'} . "\n";
 
     if ( $user->{'Name'} eq 'Nobody' ) {
         $user_map->{ $user->{'id'} } = $RT::Nobody->Id;
@@ -912,8 +912,10 @@ sub import_user {
     $user_obj = load_user( $user->{'EmailAddress'} || $user->{'Name'} );
 
     unless ( $user_obj->Id ) {
+        print "Creating new user for $user->{Name}\n";
         my ( $uid, $umsg ) = $user_obj->Create( %{$user} );
     }
+    
     my $id = $user_obj->Id();
     print "Failed to create user for" . scalar Dumper $user unless ($id);
     $user_map->{$old_id} = $id;
