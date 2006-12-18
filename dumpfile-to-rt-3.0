@@ -66,6 +66,8 @@ my $group_map;
 my $queue_map;
 my $cf_map;
 my $transaction_map;
+my $ticket_map;
+my $ticket_merge_map;
 my @errors;
 
 if ( ExportType() eq 'incremental' ) {
@@ -582,15 +584,64 @@ sub import_tickets {
 
             }
 
+            my $original_ticket_id = $ticket->{id};
+            if ($merge_on_import) {
+                # no good way to do a load, unless we were going to 
+                # load on id + Subject, but that seems horribly error prone
+                delete $ticket->{id};
+                if ($ticket->{EffectiveId} == $original_ticket_id) {
+                    delete $ticket->{EffectiveId};
+                }
+            } 
+
             my ( $tid, $ttrans, $msg ) = $tick_object->Create( %{$ticket} );
-            unless ( $tid = $ticket->{'id'} ) {
+
+            unless ( $tid ) {
                 print "\nCouldn't create TICKET: $msg";
                 die;
             }
 
-            unless ( $tick_object->Id == $ticket->{id} ) {
-                print "\nCouldn't create ticket $ticket " . Dumper($ticket);
+            # we can't verify ids if we're merging into an existing RT instance
+            unless ($merge_on_import) {
+                unless ( $tid == $original_ticket_id ) {
+                    print "\nCouldn't create TICKET: $msg";
+                    die;
+                }
+                unless ( $tick_object->Id == $original_ticket_id ) {
+                    print "\nCouldn't create ticket $ticket " . Dumper($ticket);
+                }
             }
+
+            if ( $merge_on_import ) { 
+                # we need to rewrite merged tickets
+                if ( $ticket->{EffectiveId} &&
+                     $ticket->{EffectiveId} != $original_ticket_id ) {
+                    if ( $ticket_map->{$ticket->{EffectiveId}} ) {
+                        $tick_object->__Set( Field => 'EffectiveId',
+                                             Value => $ticket_map->{$ticket->{EffectiveId}} );
+                    } else {
+                        # sometimes we haven't converted the ticket we're pointing to
+                        # so save it for later
+                        push @{$ticket_merge_map->{$ticket->{EffectiveId}}}, $tick_object->id;
+                    }
+                }
+
+                if ( $ticket_merge_map->{$original_ticket_id} ) {
+                    # this ticket was reference in EffectiveId on another ticket
+                    # so load that ticket up and tell it our new Id
+                    print Dumper $ticket_merge_map;
+                    my $merged_ticket = RT::Ticket->new($RT::SystemUser);
+                    my $tickets_to_fix = delete $ticket_merge_map->{$original_ticket_id};
+                    foreach my $ticket_id ( @$tickets_to_fix ) {
+                        $merged_ticket->LoadById( $ticket_id );
+                        $merged_ticket->__Set( Field => 'EffectiveId',
+                                               Value => $tick_object->Id );
+                    }
+                }
+            }
+
+
+            $ticket_map->{$original_ticket_id} = $tick_object->Id;
 
             #import ticket transactions
             foreach my $t ( @{ $temp{Transaction} } ) {
