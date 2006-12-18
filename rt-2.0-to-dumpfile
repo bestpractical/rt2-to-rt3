@@ -196,6 +196,7 @@ my $ds;
 
 if ( $mode =~ /^all$/i ) {
 
+    print STDERR "Exporting Groups\n";
     my $Groups = RT::Groups->new($RT::SystemUser);
     $Groups->LimitToReal();
     $Groups->{'find_disabled_rows'} = 1;
@@ -214,10 +215,13 @@ if ( $mode =~ /^all$/i ) {
         push @{ $ds->{'Group'} }, $group;
     }
 
+    print STDERR "Exporting Users\n";
     my @users = export_users($ds);
     $ds->{'User'} = \@users;
 
+    print STDERR "Exporting Queues\n";
     export_queues($ds);
+    print STDERR "Exporting Keywords\n";
     my $global_ks    = RT::KeywordSelects->new($RT::SystemUser);
     $global_ks->LimitToQueue(0);
     $global_ks->{'find_disabled_rows'} = 1;
@@ -235,6 +239,7 @@ if ( $mode =~ /^all$/i ) {
         }
     }
 
+    print STDERR "Exporting Scrips\n";
     my $scrips = RT::Scrips->new($RT::SystemUser);
     $scrips->LimitToGlobal();
     foreach my $scrip ( @{ $scrips->ItemsArrayRef } ) {
@@ -245,6 +250,7 @@ if ( $mode =~ /^all$/i ) {
 
     }
 
+    print STDERR "Exporting ACLs\n";
     my $ACL = RT::ACL->new($RT::SystemUser);
     $ACL->LimitToSystem();
 
@@ -260,6 +266,7 @@ if ( $mode =~ /^all$/i ) {
         push ( @{ $ds->{'Global'}->{'Right'} }, $right_ds );
     }
 
+    print STDERR "Exporting Links\n";
     my $links = RT::Links->new($RT::SystemUser);
     $links->UnLimit();
     while ( my $l = $links->Next ) {
