@@ -153,6 +153,21 @@ my %FIELD_MAPPINGS = (
                              'ObjectType',
                              'id'
                            ],
+    'RT::Queue' => [
+                    'id',
+                    'Name',
+                    'Description',
+                    'CorrespondAddress',
+                    'CommentAddress',
+                    'InitialPriority',
+                    'FinalPriority',
+                    'DefaultDueIn',
+                    'Creator',
+                    'Created',
+                    'LastUpdatedBy',
+                    'LastUpdated',
+                    'Disable'
+                   ]
 );
 
 use RT::Interface::CLI qw(CleanEnv LoadConfig DBConnect GetCurrentUser GetMessageContent);
