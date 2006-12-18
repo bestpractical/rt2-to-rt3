@@ -342,6 +342,7 @@ else {
 
 if ($import_links) {
     print "Importing links\n";
+    my $imported_links;
     foreach my $link ( @{ $VAR1->{'Link'} } ) {
         print "l";
         my $l = RT::Link->new($RT::SystemUser);
@@ -351,22 +352,46 @@ if ($import_links) {
 
         my ( $val, $msg );
 
+        my $target = $ticket_map->{$link->{LocalTarget}};
+        unless ($target) {
+            $target = $link->{Target};
+            $target =~ s/ticket\/(\d+)/ticket\/$ticket_map->{$1}/;
+        }
+
+        my $base   = $ticket_map->{$link->{LocalBase}};
+        unless ($base) {
+            $base = $link->{Base};
+            $base =~ s/ticket\/(\d+)/ticket\/$ticket_map->{$1}/;
+        }
+
+        if (my $dup = $imported_links->{"$target-$base-$link->{Type}"}) {
+            print "\nSkipping link creation " .
+                  "($link->{LocalBase} $link->{LocalTarget} $link->{Type})" .
+                  " because duplicate of $dup detected\n";
+            next;
+        }
         eval {
-            ( $val, $msg ) = $l->Create(
+            ( $val, $msg ) = RT::Record::Create($l,
                 Type   => $link->{'Type'},
-                Target => ( $link->{'LocalTarget'} || $link->{'Target'} ),
-                Base   => ( $link->{'LocalBase'} || $link->{'Base'} )
+                LocalTarget => $target,
+                LocalBase   => $base,
+                Target => "fsck.com-rt://$RT::rtname/ticket/$target",
+                Base   => "fsck.com-rt://$RT::rtname/ticket/$base"
             );
         };
         if ($@) {
-            print $@;
+            print $@,$msg;
         }
+
+        $imported_links->{"$target-$base-$link->{Type}"} = $l->Id;
+     
         unless ( $l->Id ) {
             if ( $link->{'LocalBase'} != $link->{'LocalTarget'} ) {
                 push( @errors,
                         "Couldn't create link  from "
                       . $link->{'Base'} . " to "
-                      . $link->{'Target'} );
+                      . $link->{'Target'}
+                      . " because $msg" );
             }
         }
     }
