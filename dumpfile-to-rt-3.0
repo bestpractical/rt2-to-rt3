@@ -32,6 +32,7 @@ my $import_groups          = 1;
 my $import_queues          = 1;
 my $import_tickets         = 1;
 my $import_links           = 1;
+my $merge_on_import        = 0;
 use lib ("/opt/rt3/lib");
 
 use Getopt::Long;
@@ -95,6 +96,7 @@ if ( ExportType() eq 'incremental' ) {
 
 }
 else {
+    check_import();
     print "Importing scrips\n";
     foreach my $scrip ( @{ $VAR1->{'Global'}->{'Scrip'} } ) {
 	print "s";
@@ -814,3 +816,25 @@ sub import_user {
 }
 
 # }}}
+
+sub check_import {
+    return if $merge_on_import;
+
+    my $queues = RT::Queues->new($RT::SystemUser);
+    $queues->UnLimit(); 
+    while ( my $queue = $queues->Next ) {
+        if ($queue->Name eq 'general') {
+            die "You have more than just the 'general' queue.\n" .
+                "If this is not a clean RT install, set \$merge_on_import " .
+                "to enable merging of tickets.";
+        }
+    }
+
+    my $tickets = RT::Tickets->new($RT::SystemUser);
+    $tickets->Limit( FIELD => 'id', OPERATOR => "!=", VALUE => "0" );
+    if ($tickets->Count > 0) {
+        die "You already have tickets in this RT install\n" .
+            "If this is not a clean RT install, set \$merge_on_import " .
+            "to enable merging of tickets.";
+    }
+}
