@@ -347,7 +347,7 @@ else {
                 );
                 unless ($cfobj->Id) {
                     $cfobj->Create(
-                        Name     => "$cf->{'Name'}",
+                        Name     => $cf->{'Name'},
                         Type     => $type,
                         Disabled => ( $cf->{'Disabled'} || 0 ),
                         Queue    => $queue_obj->Id
