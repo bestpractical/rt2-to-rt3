@@ -61,10 +61,15 @@ my $DIR = shift @ARGV
 require $DIR . "/metadata";
 my $VAR1 = Data();
 
+$RT::LogStackTraces = 1;
+
 # optional second command line argument
 # tells us where to find mappings
+sub client_setup {};
 sub client_import_queue {};
 sub client_import_user {};
+sub client_import_ticket {};
+sub client_import_ticket_extra {};
 my $CLIENT_MAPPING = shift @ARGV;
 eval { require $CLIENT_MAPPING if $CLIENT_MAPPING };
 
@@ -108,6 +113,7 @@ if ( ExportType() eq 'incremental' ) {
 else {
     check_import();
     print "Importing scrips\n";
+    client_setup();
     foreach my $scrip ( @{ $VAR1->{'Global'}->{'Scrip'} } ) {
 	print "s";
         import_scrip( $scrip, 0 );
@@ -261,9 +267,7 @@ else {
 
         foreach my $queue ( @{$queues} ) {
             print "q";
-            if (my $client_queue = client_import_queue($queue)) {
-                $queue = $client_queue;
-            }
+            $queue = client_import_queue($queue);
 
             my %temp;
             foreach my $attr qw(id CustomField Watchers Scrip Right) {
@@ -338,7 +342,7 @@ else {
                     $type = 'SelectMultiple';
                 }
                 $cfobj->LoadByName(
-                    Name  => "$cf->{Name}",
+                    Name  => $cf->{Name},
                     Queue => $queue_obj->Id
                 );
                 unless ($cfobj->Id) {
@@ -581,6 +585,8 @@ sub import_tickets {
                 $ticket = Data();
             }
 
+            $ticket = client_import_ticket($ticket);
+
 #	    next if ($ticket->{'Status'} eq 'dead');
 
             my %temp;
@@ -696,7 +702,6 @@ sub import_tickets {
                 if ( $ticket_merge_map->{$original_ticket_id} ) {
                     # this ticket was reference in EffectiveId on another ticket
                     # so load that ticket up and tell it our new Id
-                    print Dumper $ticket_merge_map;
                     my $merged_ticket = RT::Ticket->new($RT::SystemUser);
                     my $tickets_to_fix = delete $ticket_merge_map->{$original_ticket_id};
                     foreach my $ticket_id ( @$tickets_to_fix ) {
@@ -913,6 +918,7 @@ sub import_tickets {
                     }
                 }
             }
+            client_import_ticket_extra($tick_object);
 	    print "\n";
         }
     }
