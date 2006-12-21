@@ -329,6 +329,7 @@ else {
             }
             foreach my $cf ( @{ $temp{'CustomField'} } ) {
                 my $type;
+                encode_hashref($cf);
                 my $cfobj = RT::CustomField->new($RT::SystemUser);
                 if ( $cf->{'Single'} ) {
                     $type = 'SelectSingle';
@@ -336,17 +337,32 @@ else {
                 else {
                     $type = 'SelectMultiple';
                 }
-                $cfobj->Create(
-                    Name     => $cf->{'Name'},
-                    Type     => $type,
-                    Disabled => ( $cf->{'Disabled'} || 0 ),
-                    Queue    => $queue_obj->Id
+                $cfobj->LoadByName(
+                    Name  => "$cf->{Name}",
+                    Queue => $queue_obj->Id
                 );
+                unless ($cfobj->Id) {
+                    $cfobj->Create(
+                        Name     => "$cf->{'Name'}",
+                        Type     => $type,
+                        Disabled => ( $cf->{'Disabled'} || 0 ),
+                        Queue    => $queue_obj->Id
+                    );
+                }
                 unless ( $cfobj->Id ) {
                     print "\nCouldn't create custom field " . $cf->{'Name'};
                 }
+
                 $cf_map->{ $cf->{'id'} } = $cfobj->Id;
+
+                my %existing_values;
+                my $cfvalues = $cfobj->Values;
+                while (my $value = $cfvalues->Next) {
+                    $existing_values{$value->Name} = 1;
+                }
+
                 foreach my $val ( @{ $cf->{'Value'} } ) {
+                    next if $existing_values{$val};
                     $cfobj->AddValue( Name => $val );
                 }
             }
