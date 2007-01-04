@@ -169,7 +169,7 @@ my %FIELD_MAPPINGS = (
                     'Created',
                     'LastUpdatedBy',
                     'LastUpdated',
-                    'Disable'
+                    'Disabled'
                    ]
 );
 
