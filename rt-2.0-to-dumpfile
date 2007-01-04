@@ -16,6 +16,9 @@ my $since = ( shift || undef );
 
 # Set to 0 to not bother exporting dead/deleted tickets.
 my $export_dead = 1;
+# set to 0 to skip disabled queues, make sure there aren't
+# any tickets in those queues
+my $export_disabled_queues = 1;
 
 my $export_dir_counter = 0;
 $export_dir_base .= "/";
@@ -445,7 +448,9 @@ sub export_queues {
 
     my $Queues = RT::Queues->new($RT::SystemUser);
     $Queues->UnLimit();
-    $Queues->{'find_disabled_rows'} = 1;
+    if ($export_disabled_queues) {
+        $Queues->{'find_disabled_rows'} = 1;
+    }
 
     foreach my $Queue ( @{ $Queues->ItemsArrayRef } ) {
         my $queue_ds;
