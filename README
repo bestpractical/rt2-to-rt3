@@ -1,10 +1,6 @@
-Migrating from RT 2.0 to RT 3.0 
+Migrating from RT 2.0 to RT 3.x 
 
-NOTICE: IF YOU WANT TO UPGRADE FROM RT 2.0 TO A RELEASE OF RT AFTER 3.0,
-YOU MUST FIRST UPGRADE TO RT 3.0
-
-
-This tool migrates your RT2 instance to an RT 3.0 instance. It transfers:
+This tool migrates your RT2 instance to an RT 3.x instance. It transfers:
 
 	Users
 	Groups
@@ -33,7 +29,7 @@ Tell rt-2.0-to-dumpfile where your RT libraries live. (Edit the 'use lib' lines)
 Execute:
 rt-2.0-to-dumpfile  DIRNAME
 
-DIRNAME will now contain one file called "metadata" and one subdirectories
+DIRNAME will now contain one file called "metadata" and several subdirectories
 which contain about 1000 files, 1 file per ticket.
 
 
@@ -71,8 +67,37 @@ If you're using a database such as Postgres or Oracle that has
 explicit sequence support, you may need to set the value of each
 table's sequence to the MAX(id) for that table
 
+MERGING
 
-        Jesse Vincent
-        jesse@bestpractical.com
-        1 Mar 2003
+This release of rt2-to-rt3 supports merging your RT2 instance into an existing
+RT3 instance.  You should create your RT2 dump as above:
 
+rt-2.0-to-dumpfile DIRNAME
+
+You will need to set $merge_on_import in dumpfile-to-rt-3.0 to a true value
+Then you can run 
+
+dumpfile-to-rt-3.0 DIRNAME
+
+The importer will do extra work to handle renumbering your tickets and looking
+for queues that might already exist in your new RT instance
+
+CUSTOM CODE ON IMPORT
+
+If you want to do custom changes to your data during the import, there are some
+new hooks for this.  Create a file that defines any of the following subroutines
+
+sub client_setup
+sub client_import_queue
+sub client_import_user
+sub client_import_ticket
+sub client_import_ticket_extra
+
+tell the importer about this file by passing it as the second argument
+
+dumpfile-to-rt-3.0 DIRNAME PATH/TO/FIlE/WITH/CUSTOMCODE
+
+These can be used to create new groups, assign all users to a group,
+assign all tickets a new CustomField.
+
+Bug reports and problems can be sent to rt-devel@lists.bestpractical.com
