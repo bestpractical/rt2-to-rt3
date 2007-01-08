@@ -954,7 +954,20 @@ sub import_user {
     delete $user->{'Password'};
     $user_obj = load_user( $user->{'EmailAddress'} || $user->{'Name'} );
 
-    unless ( $user_obj->Id ) {
+    if ( $user_obj->Id ) {
+        if ($merge_on_import && 
+            $user->{Privileged}  && 
+            !$user_obj->Privileged) {
+            # a priviledged user sometimes needs ot be merged with an 
+            # auto-created user in the newer RT instance
+            $user_obj->SetPrivileged(1);
+            if ($user->{CryptedPassword}) {
+                $user_obj->__Set(Password=>$user->{CryptedPassword});
+            }
+            $user_obj->SetName($user->{Name}) if $user->{Name};
+            $user_obj->SetRealName($user->{RealName}) if $user->{RealName};
+        }
+    } else {
         print "Creating new user for $user->{Name}\n";
         my ( $uid, $umsg ) = $user_obj->Create( %{$user} );
     }
