@@ -649,8 +649,9 @@ sub import_tickets {
 
             }
 
+            encode_hashref($temp{CustomFields});
             foreach my $cf ( keys %{ $temp{'CustomFields'} } ) {
-		print "f";
+                print "f";
                 my $cfid = $cf_map->{$cf};
                 $ticket->{ 'CustomField-' . $cfid } =
                   $temp{'CustomFields'}->{$cf};
