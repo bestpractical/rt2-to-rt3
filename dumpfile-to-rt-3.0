@@ -267,7 +267,7 @@ else {
 
         foreach my $queue ( @{$queues} ) {
             print "q";
-            $queue = client_import_queue($queue);
+            $queue = client_import_queue($queue) || $queue;
 
             my %temp;
             foreach my $attr qw(id CustomField Watchers Scrip Right) {
@@ -585,7 +585,7 @@ sub import_tickets {
                 $ticket = Data();
             }
 
-            $ticket = client_import_ticket($ticket);
+            $ticket = client_import_ticket($ticket) || $ticket;
 
 #	    next if ($ticket->{'Status'} eq 'dead');
 
@@ -672,6 +672,7 @@ sub import_tickets {
 
             unless ( $tid ) {
                 print "\nCouldn't create TICKET: $msg";
+                print Dumper $ticket;
                 die;
             }
 
