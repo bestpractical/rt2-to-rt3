@@ -920,9 +920,9 @@ sub import_tickets {
                     }
                 }
             }
-            print "remapped to ".$tick_object->Id;
+            print " remapped to ".$tick_object->Id;
             client_import_ticket_extra($tick_object);
-	    print "\n";
+            print "\n";
         }
     }
 }
@@ -977,6 +977,7 @@ sub import_user {
     my $id = $user_obj->Id();
     print "Failed to create user for" . scalar Dumper $user unless ($id);
     $user_map->{$old_id} = $id;
+
     client_import_user($user_obj);
 }
 
