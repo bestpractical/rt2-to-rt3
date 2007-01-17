@@ -345,6 +345,15 @@ else {
                     Name  => $cf->{Name},
                     Queue => $queue_obj->Id
                 );
+
+                # look for an existing cf not assigned to this queue yet
+                unless ($cfobj->Id) {
+                    $cfobj->LoadByName( Name => $cf->{Name} );
+                    if ($cfobj->Id) {
+                        $cfobj->AddToObject( $queue_obj );
+                    }
+                }
+
                 unless ($cfobj->Id) {
                     $cfobj->Create(
                         Name     => $cf->{'Name'},
