@@ -430,12 +430,14 @@ if ($import_links) {
             next;
         }
         eval {
+            my $uri = RT::URI::fsck_com_rt->new($RT::SystemUser);
+            my $prefix = $uri->LocalURIPrefix;
             ( $val, $msg ) = RT::Record::Create($l,
                 Type   => $link->{'Type'},
                 LocalTarget => $target,
                 LocalBase   => $base,
-                Target => "fsck.com-rt://$RT::rtname/ticket/$target",
-                Base   => "fsck.com-rt://$RT::rtname/ticket/$base"
+                Target => "$prefix/ticket/$target",
+                Base   => "$prefix/ticket/$base"
             );
         };
         if ($@) {
