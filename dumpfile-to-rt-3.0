@@ -366,6 +366,16 @@ else {
                     print "\nCouldn't create custom field " . $cf->{'Name'};
                 }
 
+                # sometimes we import the same CF a few times 
+                # and need to make it not disabled for those queues 
+                # that need it.
+                # We might want to not even create CFs that are disabled.
+                if ($cfobj->Id
+                    and not $cf->{Disabled}
+                    and $cfobj->Disabled) {
+                    $cfobj->SetDisabled(0);
+                }
+
                 $cf_map->{ $cf->{'id'} } = $cfobj->Id;
 
                 my %existing_values;
