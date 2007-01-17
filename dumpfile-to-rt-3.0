@@ -939,6 +939,16 @@ sub import_tickets {
                         # if Parent == 0, we might have children in following rows
                         $attachment_parent = $att->Id;
                     }
+                    # Import clobbers our setting of ContentEncoding
+                    # we maybe could store things as binaries in the DB
+                    # but since Attachment->OriginalContent and Attachment->Content
+                    # will decode things with ContentEncoding eq 'base64' we'll
+                    # set that properly instead.
+                    if ($a->{ContentEncoding} eq 'base64' 
+                        && $a->{ContentEncoding} ne $att->ContentEncoding) {
+                        $att->__Set(Field => 'ContentEncoding',
+                                    Value => $a->{ContentEncoding});
+                    }
                 }
             }
             print " remapped to ".$tick_object->Id;
