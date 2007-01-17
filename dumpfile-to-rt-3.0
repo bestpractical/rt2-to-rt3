@@ -985,7 +985,8 @@ sub import_user {
             # auto-created user in the newer RT instance
             $user_obj->SetPrivileged(1);
             if ($user->{CryptedPassword}) {
-                $user_obj->__Set(Password=>$user->{CryptedPassword});
+                $user_obj->__Set(Field => 'Password',
+                                 Value => $user->{CryptedPassword});
             }
             $user_obj->SetName($user->{Name}) if $user->{Name};
             $user_obj->SetRealName($user->{RealName}) if $user->{RealName};
