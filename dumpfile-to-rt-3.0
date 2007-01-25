@@ -697,6 +697,11 @@ sub import_tickets {
                 die;
             }
 
+            # Told isn't handled in Ticket->Create
+            if ($ticket->{Told}) {
+                $tick_object->__Set( Field => 'Told', Value => $ticket->{Told} );
+            }
+
             # we can't verify ids if we're merging into an existing RT instance
             unless ($merge_on_import) {
                 unless ( $tid == $original_ticket_id ) {
