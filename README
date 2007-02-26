@@ -1,5 +1,9 @@
 Migrating from RT 2.0 to RT 3.x 
 
+You can use make install to install the two scripts in this package.
+It may be easier to work from withing the distribution instead, in case you 
+need to modify anything in the scripts.
+
 This tool migrates your RT2 instance to an RT 3.x instance. It transfers:
 
 	Users
