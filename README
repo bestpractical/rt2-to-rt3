@@ -20,7 +20,7 @@ It does NOT automatically migrate:
 
 
 
-Create a directory to hold your RT2 database dump. here we'll refer to it as
+Create a directory to hold your RT2 database dump. Here we'll refer to it as
 DIRNAME. Anywhere you see the string  "DIRNAME", replace it with the path to
 your directory.
 
@@ -100,4 +100,6 @@ dumpfile-to-rt-3.0 DIRNAME PATH/TO/FIlE/WITH/CUSTOMCODE
 These can be used to create new groups, assign all users to a group,
 assign all tickets a new CustomField.
 
-Bug reports and problems can be sent to rt-devel@lists.bestpractical.com
+You can find some example code using these hooks in the examples directory
+
+Bug reports and problems should be sent to rt-devel@lists.bestpractical.com
