@@ -32,7 +32,7 @@ my $export_dir       = "$export_dir_base" . "tickets-" . "$export_dir_counter";
 use Carp;
 use Getopt::Long qw(:config pass_through);
 use Data::Dumper;
-use Storable qw(nstore);;
+use Storable qw(nstore);
 use lib "/opt/rt-bps/lib";
 use lib "/opt/rt-bps/etc";
 
