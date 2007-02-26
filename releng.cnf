@@ -1,7 +1,0 @@
-PRODUCT			        = rt2-to-rt3
-TAG			            = 1.23
-CANONICAL_REPO		    = svn+ssh://svn.bestpractical.com/svn/bps-public/rt2-to-rt3/
-TAGS		            = tags/
-TRUNK	                = trunk/
-TMP_DIR			        = /tmp
-RELEASE_DIR		        = /home/ftp/pub/rt/devel
