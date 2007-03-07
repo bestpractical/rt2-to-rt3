@@ -17,3 +17,4 @@ README
 rt-2.0-to-dumpfile
 tools/rt2_dumptemplates.pl
 tools/rt2_showscrips.pl
+RT2toRT3.pm
