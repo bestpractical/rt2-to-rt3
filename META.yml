@@ -1,5 +1,5 @@
 abstract: This tool migrates your RT2 instance to an RT 3.x instance
-author: Kevin Falcone <falcone@bestpractical.com>
+author: Kevin Falcone C<< <falcone@bestpractical.com> >>
 distribution_type: module
 generated_by: Module::Install version 0.64
 license: perl
@@ -10,4 +10,4 @@ no_index:
     - examples
     - inc
     - t
-version: 1.25
+version: 1.26
