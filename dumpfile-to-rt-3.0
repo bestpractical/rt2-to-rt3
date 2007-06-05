@@ -829,7 +829,7 @@ sub import_tickets {
 
                 }
 
-                if ( $t->{'Type'} =~ /^(Force|Give|Take|Untake)$/ ) {
+                if ( $t->{'Type'} =~ /^(Force|Give|Take|Untake|Steal)$/ ) {
                     $t->{'OldValue'} = $user_map->{ $t->{OldValue} }
                       || $RT::Nobody->Id;
                     $t->{'NewValue'} = $user_map->{ $t->{NewValue} }
@@ -863,6 +863,7 @@ sub import_tickets {
  		    print "a";
  		    $a->{'TransactionId'} =
  			$transaction_map->{$a->{'TransactionId'}};
+			$a->{'Creator'} = $user_map->{$a->{'Creator'}};
  		    foreach my $k (keys %$a) {
  			next if ($k eq 'Content');
  			$a->{$k} = decode($ENCODING, $a->{$k});
