@@ -957,7 +957,7 @@ sub import_tickets {
                     }
                 }
             }
-            print " remapped to ".$tick_object->Id;
+            print " remapped to ".$tick_object->Id if $merge_on_import;
             client_import_ticket_extra($tick_object);
             print "\n";
         }
