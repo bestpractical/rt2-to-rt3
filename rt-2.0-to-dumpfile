@@ -13,6 +13,7 @@ die "You must specify an export dir" unless ($export_dir_base);
 
 my $mode  = ( shift || 'all' );
 my $since = ( shift || undef );
+my $row_limit = ($mode eq 'first') ? $since : undef;
 
 # Set to 0 to not bother exporting dead/deleted tickets.
 my $export_dead = 1;
@@ -212,7 +213,7 @@ package main;
 
 my $ds;
 
-if ( $mode =~ /^all$/i ) {
+if ( $mode =~ /^(?:all|first)$/i ) {
 
     print STDERR "Exporting Groups\n";
     my $Groups = RT::Groups->new($RT::SystemUser);
@@ -307,6 +308,8 @@ if ( $mode =~ /^all$/i ) {
     export_tickets();
 }
 else {
+    print STDERR "Doing a partial export since $since\n";
+    print STDERR "Exporting Users\n";
     my @users = export_users($ds);
     $ds->{'User'} = \@users;
 
@@ -331,6 +334,13 @@ sub export_tickets {
                      OPERATOR => ">=",
                      VALUE    => $since );
     }
+
+    # limit to the first 50/100/etc tickets for testing
+    if ($mode eq 'first' && $row_limit) {
+        print STDERR "limiting to $row_limit tickets";
+        $tix->RowsPerPage($row_limit);
+    }
+
     ## XXX we could Limit on 'Status' '!=' 'dead' if $export_dead == 0,
     ## but then we'd not be able to say /why/ we're not exporting the
     ## ticket...
