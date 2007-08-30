@@ -90,6 +90,16 @@ if ( ExportType() eq 'incremental' ) {
         $user->{'Name'} = "Unnamed user " . $user->{'id'} unless ( $user->{'Name'} );
         print "Checking user " . $user->{'Name'} . "\n";
 
+        if ( $user->{'Name'} eq 'Nobody' ) {
+            $user_map->{ $user->{'id'} } = $RT::Nobody->Id;
+            next;
+        }
+
+        if ( $user->{'Name'} eq 'RT_System' ) {
+            $user_map->{ $user->{'id'} } = $RT::SystemUser->Id;
+            next;
+        }
+
         my $obj = load_user( $user->{'Name'} );
         if ( !$obj->Id && $user->{'EmailAddress'} ) {
             $obj = load_user( $user->{'EmailAddress'} );
