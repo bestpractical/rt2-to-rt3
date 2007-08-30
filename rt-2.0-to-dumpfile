@@ -13,7 +13,7 @@ die "You must specify an export dir" unless ($export_dir_base);
 
 my $mode  = ( shift || 'all' );
 my $since = ( shift || undef );
-my $row_limit = ($mode eq 'first') ? $since : undef;
+my $row_limit = ($mode =~ /^(?:first|after)$/) ? $since : undef;
 
 # Set to 0 to not bother exporting dead/deleted tickets.
 my $export_dead = 1;
@@ -308,7 +308,11 @@ if ( $mode =~ /^(?:all|first)$/i ) {
     export_tickets();
 }
 else {
-    print STDERR "Doing a partial export since $since\n";
+    if ($mode eq 'after') {
+        print STDERR "Doing a partial export of the last $row_limit rows\n";
+    } else {
+        print STDERR "Doing a partial export since $since\n";
+    }
     print STDERR "Exporting Users\n";
     my @users = export_users($ds);
     $ds->{'User'} = \@users;
@@ -339,6 +343,13 @@ sub export_tickets {
     if ($mode eq 'first' && $row_limit) {
         print STDERR "limiting to $row_limit tickets";
         $tix->RowsPerPage($row_limit);
+    }
+
+    # limit to tickets after the given id, so you can add on to a "first" export
+    if ($mode eq 'after' && $row_limit) {
+        $tix->Limit( FIELD    => 'id',
+                     OPERATOR => ">",
+                     VALUE    => $row_limit);
     }
 
     ## XXX we could Limit on 'Status' '!=' 'dead' if $export_dead == 0,
