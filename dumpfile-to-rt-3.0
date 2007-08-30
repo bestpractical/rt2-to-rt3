@@ -87,6 +87,9 @@ if ( ExportType() eq 'incremental' ) {
     my $users = $VAR1->{'User'};
     foreach my $user ( @{$users} ) {
         encode_hashref($user);
+        $user->{'Name'} = "Unnamed user " . $user->{'id'} unless ( $user->{'Name'} );
+        print "Checking user " . $user->{'Name'} . "\n";
+
         my $obj = load_user( $user->{'Name'} );
         if ( !$obj->Id && $user->{'EmailAddress'} ) {
             $obj = load_user( $user->{'EmailAddress'} );
@@ -97,6 +100,7 @@ if ( ExportType() eq 'incremental' ) {
             delete $user->{'EmailAddress'};
             delete $user->{'Privileged'};
             delete $user->{'id'};
+            delete $user->{'Disabled'};
             foreach my $field ( keys %$user ) {
                 $obj->__Set( Field => $field, Value => $user->{$field} );
             }
