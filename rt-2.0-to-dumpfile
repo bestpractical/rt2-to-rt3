@@ -316,6 +316,17 @@ else {
     print STDERR "Exporting Users\n";
     my @users = export_users($ds);
     $ds->{'User'} = \@users;
+    print STDERR "Exporting Links\n";
+    my $links = RT::Links->new($RT::SystemUser);
+    $links->UnLimit();
+    while ( my $l = $links->Next ) {
+        my $link_ds;
+        foreach my $param ( sort @{$FIELD_MAPPINGS{'RT::Link'}} ) {
+            $link_ds->{$param} = $l->_Value($param)
+              if ( $l->_Value($param) );
+        }
+        push ( @{ $ds->{'Link'} }, $link_ds );
+    }
 
     open( META, ">$export_dir_base/metadata" );
     print META "sub Data {\n";
