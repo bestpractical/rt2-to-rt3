@@ -1,6 +1,6 @@
 package RT::Extension::RT2toRT3;
 
-our $VERSION = '1.26_01';
+our $VERSION = '1.26_02';
 
 use warnings;
 use strict;
