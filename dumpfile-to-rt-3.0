@@ -1024,6 +1024,9 @@ sub import_user {
     } else {
         print "Creating new user for $user->{Name}\n";
         my ( $uid, $umsg ) = $user_obj->Create( %{$user} );
+        unless ($uid) {
+            print "Error creating new user $umsg";
+        }
     }
     
     my $id = $user_obj->Id();
