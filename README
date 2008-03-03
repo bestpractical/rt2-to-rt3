@@ -39,6 +39,13 @@ which contain about 1000 files, 1 file per ticket.
 
 Install rt3. Let it set up your rt3 database.
 
+You probably want to take this opportunity to add an Index to your
+CachedGroupMembers table.  If you're running PostgreSQL, you should already
+have a relevant index.  For MySQL or Oracle, this should help avoid
+table scans during the import.
+
+ALTER TABLE CachedGroupMembers add index MemIm (MemberId, ImmediateParentId);
+
 Tell dumpfile-to-rt-3.0 where your RT libraries live. (Edit the 'use lib' lines)
 
 If your RT instance contains tickets encoded in a characterset other than
