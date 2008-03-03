@@ -1,8 +1,9 @@
 --- 
 abstract: This tool migrates your RT2 instance to an RT 3.x instance
-author: Kevin Falcone C<< <falcone@bestpractical.com> >>
+author: 
+  - Kevin Falcone C<< <falcone@bestpractical.com> >>
 distribution_type: module
-generated_by: Module::Install version 0.67
+generated_by: Module::Install version 0.68
 license: perl
 meta-spec: 
   url: http://module-build.sourceforge.net/META-spec-v1.3.html
